@@ -164,6 +164,38 @@ def page_profile() -> None:
 
         st.write("**Skills:** " + ", ".join(profile.get("skills", [])) or "—")
         st.write("**Preferred roles:** " + ", ".join(profile.get("preferred_roles", [])))
+
+        st.subheader("Experience range (flexible matching)")
+        exp_col1, exp_col2, exp_col3 = st.columns(3)
+        ymin = exp_col1.number_input(
+            "Min years target",
+            0,
+            20,
+            int(profile.get("target_years_min") or 0),
+        )
+        ymax = exp_col2.number_input(
+            "Max years target",
+            0,
+            20,
+            int(profile.get("target_years_max") or 2),
+        )
+        st.caption(
+            "Jobs within this range (plus flexibility below) will be included. "
+            "Set 0–2 for entry level, 2–5 for mid, etc."
+        )
+        if st.button("Save experience range"):
+            profile["target_years_min"] = int(ymin)
+            profile["target_years_max"] = int(ymax)
+            profile_id = st.session_state.get("profile_id")
+            resp = api_put(f"/resume/{profile_id}", json=profile)
+            if resp.status_code == 200:
+                data = resp.json()
+                st.session_state["profile_id"] = data["profile_id"]
+                st.session_state["profile"] = data["profile"]
+                st.success(f"Saved target range {ymin}-{ymax} years.")
+            else:
+                st.error(resp.json().get("detail", "Could not save profile."))
+
         with st.expander("Full parsed JSON"):
             st.json(profile)
 
