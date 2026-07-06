@@ -116,6 +116,12 @@ Set `JOB_SOURCE=all` to query every source in one run, or pick a single id (e.g.
 
 On the **Profile** page, set a target years range (e.g. 0–2 for entry-level). The pipeline uses tier labels plus this range with configurable flexibility (`EXPERIENCE_FLEX_YEARS`, default ±2) so nearby roles are included without surfacing clearly senior jobs.
 
+### Location
+
+On the **Profile** page, set your **preferred location** (pre-filled from your resume). Remote jobs are included by default; uncheck **Include remote jobs** to restrict results to that city.
+
+On **Run Pipeline**, you can override the location for a single run. Scrapers pass location into Indeed, Naukri, LinkedIn, and Glassdoor search URLs; API-based boards (Remotive, RemoteOK, etc.) are filtered after fetch. City aliases are supported (e.g. Bengaluru ↔ Bangalore).
+
 ## Project layout
 
 ```
