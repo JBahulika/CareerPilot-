@@ -85,6 +85,7 @@ def _filter_node(state: PipelineState) -> PipelineState:
             exclude_internships=state.get("exclude_internships", False),
             strict_experience=state.get("strict_experience", True),
             allow_stretch=state.get("allow_stretch", False),
+            flex_years=state.get("flex_years"),
         )
         return {"filtered_jobs": filtered, "current_step": "filter"}
     except Exception as exc:  # noqa: BLE001
@@ -104,6 +105,7 @@ def _match_node(state: PipelineState) -> PipelineState:
             top_n=state.get("top_n", settings.top_n_jobs),
             strict_experience=state.get("strict_experience", True),
             allow_stretch=state.get("allow_stretch", False),
+            flex_years=state.get("flex_years"),
         )
         update_run(state["run_id"], jobs_matched=len(matches))
         return {"matches": matches, "current_step": "match"}
@@ -177,6 +179,7 @@ def run_pipeline(
     exclude_internships: bool = False,
     strict_experience: bool = True,
     allow_stretch: bool = False,
+    flex_years: Optional[int] = None,
 ) -> None:
     """Execute the full pipeline. Intended to run as a background task."""
     logger.info(f"Pipeline run {run_id} starting")
@@ -189,6 +192,7 @@ def run_pipeline(
         "exclude_internships": exclude_internships,
         "strict_experience": strict_experience,
         "allow_stretch": allow_stretch,
+        "flex_years": flex_years,
         "errors": [],
     }
     try:
