@@ -138,7 +138,13 @@ class WellfoundSource:
 
     name = "wellfound"
 
-    def fetch(self, profile: UserProfile, limit: int) -> list[JobListing]:
+    def fetch(
+        self,
+        profile: UserProfile,
+        limit: int,
+        *,
+        allow_stretch: bool = False,
+    ) -> list[JobListing]:
         try:
             from playwright.sync_api import sync_playwright
         except ImportError:
