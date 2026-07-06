@@ -6,7 +6,11 @@ final score blends both signals: 60% embedding, 40% LLM. Jobs that exceed the
 candidate's experience band are excluded or heavily penalized.
 """
 
+from __future__ import annotations
+
 from datetime import datetime, timedelta
+
+from agents.base import call_ollama_json
 from core.logging import get_logger
 from models.schemas import (
     JobListing,
