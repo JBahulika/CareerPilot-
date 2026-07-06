@@ -46,7 +46,33 @@ def _strip_html(text: str) -> str:
 
 def _search_terms(profile: UserProfile) -> str:
     terms = profile.preferred_roles or [profile.role]
-    return " ".join(t for t in terms if t).strip() or "software engineer"
+    base = " ".join(t for t in terms if t).strip() or "software engineer"
+    tier = infer_candidate_tier(profile)
+    if tier <= 1:
+        return f"{base} junior entry level graduate"
+    if tier == 2:
+        return f"{base} mid level"
+    return base
+
+
+def _annotate_and_filter_jobs(
+    jobs: list[JobListing],
+    profile: UserProfile,
+    *,
+    allow_stretch: bool = False,
+) -> list[JobListing]:
+    """Populate experience labels and drop level-incompatible listings."""
+    kept: list[JobListing] = []
+    for job in jobs:
+        job.experience = experience_label_for_job(job)
+        if is_job_compatible_with_profile(job, profile, allow_stretch=allow_stretch):
+            kept.append(job)
+        else:
+            logger.info(
+                f"Scraper: dropped '{job.title}' — level mismatch "
+                f"({job.experience})"
+            )
+    return kept
 
 
 class JobSource(Protocol):
@@ -59,7 +85,13 @@ class JobSource(Protocol):
 class RemotiveSource:
     name = "remotive"
 
-    def fetch(self, profile: UserProfile, limit: int) -> list[JobListing]:
+    def fetch(
+        self,
+        profile: UserProfile,
+        limit: int,
+        *,
+        allow_stretch: bool = False,
+    ) -> list[JobListing]:
         query = _search_terms(profile)
         logger.info(f"Remotive: searching '{query}' (limit {limit})")
         try:
@@ -92,7 +124,8 @@ class RemotiveSource:
                     content_hash=_content_hash(company, title, description),
                 )
             )
-        logger.info(f"Remotive: fetched {len(jobs)} jobs")
+        jobs = _annotate_and_filter_jobs(jobs, profile, allow_stretch=allow_stretch)
+        logger.info(f"Remotive: fetched {len(jobs)} jobs after level filter")
         return jobs
 
 
@@ -151,7 +184,8 @@ class WellfoundSource:
             logger.error(f"Wellfound scrape failed: {exc}")
             return []
 
-        logger.info(f"Wellfound: fetched {len(jobs)} jobs")
+        jobs = _annotate_and_filter_jobs(jobs, profile, allow_stretch=allow_stretch)
+        logger.info(f"Wellfound: fetched {len(jobs)} jobs after level filter")
         return jobs
 
 
