@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     max_page_size: int = 15
     recent_jobs_days: int = 7
     experience_flex_years: int = 2
+    default_include_remote: bool = True
 
     # Daily scan
     daily_scan_enabled: bool = True

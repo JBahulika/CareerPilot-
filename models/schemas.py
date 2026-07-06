@@ -49,6 +49,7 @@ class UserProfile(BaseModel):
     certifications: list[str] = Field(default_factory=list)
     preferred_roles: list[str] = Field(default_factory=list)
     preferred_location: str = ""
+    include_remote: bool = True
     target_years_min: Optional[int] = None
     target_years_max: Optional[int] = None
 
@@ -70,6 +71,7 @@ class UserProfile(BaseModel):
             f"Skills: {', '.join(self.skills)}",
             f"Preferred roles: {', '.join(self.preferred_roles)}",
             f"Location: {self.preferred_location or self.location}",
+            f"Include remote: {self.include_remote}",
         ]
         for project in self.projects:
             parts.append(f"Project: {project.name} - {project.description}")
