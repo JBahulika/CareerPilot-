@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# Environment
+.env
+
+# Local data (privacy: resumes never leave the machine)
+resumes/*
+!resumes/.gitkeep
+generated_resumes/*
+!generated_resumes/.gitkeep
+jobs/*
+!jobs/.gitkeep
+logs/*
+!logs/.gitkeep
+data/
+*.db
+*.sqlite3
+chroma/
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
