@@ -29,7 +29,7 @@ Each stage is a LangGraph node sharing one typed pipeline state. See
 | Vector DB | ChromaDB |
 | Storage | SQLite (SQLModel) |
 | Resume parsing | PyMuPDF |
-| PDF generation | WeasyPrint |
+| PDF generation | PyMuPDF |
 | Scraping | Remotive API (default), Wellfound (Playwright) |
 | Logging | Loguru |
 

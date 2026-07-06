@@ -9,7 +9,6 @@ sentence-transformers>=2.7.0
 sqlmodel>=0.0.22
 pydantic-settings>=2.0.0
 pymupdf>=1.24.0
-weasyprint>=62.0
 playwright>=1.44.0
 beautifulsoup4>=4.12.0
 requests>=2.31.0

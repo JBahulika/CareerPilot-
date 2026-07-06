@@ -1,14 +1,15 @@
 """PDF Generator Agent.
 
 Renders a ``TailoredResume`` into an ATS-friendly PDF: single column, standard
-fonts, no tables or images. Uses WeasyPrint (HTML -> PDF).
+fonts, no tables or images. Uses PyMuPDF (no native GTK/Pango deps).
 """
 
 from __future__ import annotations
 
-import html
 import re
 from pathlib import Path
+
+import fitz  # PyMuPDF
 
 from core.config import settings
 from core.logging import get_logger
@@ -16,24 +17,10 @@ from models.schemas import JobListing, TailoredResume
 
 logger = get_logger(__name__)
 
-_STYLE = """
-@page { size: A4; margin: 1.6cm; }
-body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 10.5pt;
-       color: #1a1a1a; line-height: 1.4; }
-h1 { font-size: 18pt; margin: 0 0 2px 0; }
-.contact { font-size: 9.5pt; color: #444; margin-bottom: 10px; }
-h2 { font-size: 11.5pt; text-transform: uppercase; letter-spacing: 0.5px;
-     border-bottom: 1px solid #999; padding-bottom: 2px; margin: 14px 0 6px 0; }
-.item-title { font-weight: bold; }
-.item-sub { color: #555; font-size: 9.5pt; }
-p { margin: 2px 0; }
-ul { margin: 2px 0 6px 0; padding-left: 18px; }
-.skills { line-height: 1.6; }
-"""
-
-
-def _esc(text: str) -> str:
-    return html.escape(text or "")
+_PAGE_WIDTH = 595  # A4 width in points
+_PAGE_HEIGHT = 842
+_MARGIN = 45
+_CONTENT_WIDTH = _PAGE_WIDTH - 2 * _MARGIN
 
 
 def _safe_filename(company: str, role: str) -> str:
@@ -44,67 +31,148 @@ def _safe_filename(company: str, role: str) -> str:
 
 class PDFGeneratorAgent:
     def run(self, resume: TailoredResume, job: JobListing) -> str:
-        from weasyprint import HTML
-
         filename = _safe_filename(job.company, job.title) + ".pdf"
         out_path = Path(settings.generated_resumes_dir) / filename
 
-        HTML(string=self._render_html(resume)).write_pdf(str(out_path))
+        doc = fitz.open()
+        page = doc.new_page(width=_PAGE_WIDTH, height=_PAGE_HEIGHT)
+        writer = _PageWriter(page)
+
+        writer.heading(resume.name, size=18)
+        if resume.contact:
+            writer.paragraph(resume.contact, size=9.5, color=(0.27, 0.27, 0.27))
+            writer.gap(6)
+
+        if resume.summary:
+            writer.section("Summary")
+            writer.paragraph(resume.summary)
+
+        if resume.skills:
+            writer.section("Skills")
+            writer.paragraph(", ".join(resume.skills))
+
+        if resume.experience:
+            writer.section("Experience")
+            for exp in resume.experience:
+                writer.item_title(exp.title)
+                sub = " | ".join(x for x in (exp.company, exp.duration) if x)
+                if sub:
+                    writer.item_sub(sub)
+                if exp.description:
+                    writer.paragraph(exp.description)
+
+        if resume.projects:
+            writer.section("Projects")
+            for proj in resume.projects:
+                title = proj.name
+                if proj.tech_stack:
+                    title = f"{title} ({', '.join(proj.tech_stack)})"
+                writer.item_title(title)
+                if proj.description:
+                    writer.paragraph(proj.description)
+
+        if resume.education:
+            writer.section("Education")
+            for edu in resume.education:
+                writer.item_title(edu.degree)
+                sub = " | ".join(x for x in (edu.institution, edu.year) if x)
+                if sub:
+                    writer.item_sub(sub)
+
+        if resume.certifications:
+            writer.section("Certifications")
+            for cert in resume.certifications:
+                writer.bullet(cert)
+
+        doc.save(str(out_path))
+        doc.close()
         logger.info(f"Generated resume PDF: {out_path}")
         return str(out_path)
 
-    def _render_html(self, r: TailoredResume) -> str:
-        sections: list[str] = []
 
-        if r.summary:
-            sections.append(f"<h2>Summary</h2><p>{_esc(r.summary)}</p>")
+class _PageWriter:
+    def __init__(self, page: fitz.Page) -> None:
+        self._page = page
+        self._y = _MARGIN
 
-        if r.skills:
-            sections.append(
-                "<h2>Skills</h2>"
-                f"<p class='skills'>{_esc(', '.join(r.skills))}</p>"
-            )
+    def _ensure_space(self, height: float) -> None:
+        if self._y + height <= _PAGE_HEIGHT - _MARGIN:
+            return
+        self._page = self._page.parent.new_page(width=_PAGE_WIDTH, height=_PAGE_HEIGHT)
+        self._y = _MARGIN
 
-        if r.experience:
-            items = []
-            for exp in r.experience:
-                sub = " | ".join(x for x in (exp.company, exp.duration) if x)
-                items.append(
-                    f"<p class='item-title'>{_esc(exp.title)}</p>"
-                    f"<p class='item-sub'>{_esc(sub)}</p>"
-                    f"<p>{_esc(exp.description)}</p>"
-                )
-            sections.append("<h2>Experience</h2>" + "".join(items))
+    def gap(self, points: float) -> None:
+        self._y += points
 
-        if r.projects:
-            items = []
-            for proj in r.projects:
-                tech = f" ({_esc(', '.join(proj.tech_stack))})" if proj.tech_stack else ""
-                items.append(
-                    f"<p class='item-title'>{_esc(proj.name)}{tech}</p>"
-                    f"<p>{_esc(proj.description)}</p>"
-                )
-            sections.append("<h2>Projects</h2>" + "".join(items))
-
-        if r.education:
-            items = []
-            for edu in r.education:
-                sub = " | ".join(x for x in (edu.institution, edu.year) if x)
-                items.append(
-                    f"<p class='item-title'>{_esc(edu.degree)}</p>"
-                    f"<p class='item-sub'>{_esc(sub)}</p>"
-                )
-            sections.append("<h2>Education</h2>" + "".join(items))
-
-        if r.certifications:
-            lis = "".join(f"<li>{_esc(c)}</li>" for c in r.certifications)
-            sections.append(f"<h2>Certifications</h2><ul>{lis}</ul>")
-
-        return (
-            "<!DOCTYPE html><html><head><meta charset='utf-8'>"
-            f"<style>{_STYLE}</style></head><body>"
-            f"<h1>{_esc(r.name)}</h1>"
-            f"<p class='contact'>{_esc(r.contact)}</p>"
-            f"{''.join(sections)}"
-            "</body></html>"
+    def heading(self, text: str, *, size: float = 11.5) -> None:
+        self._ensure_space(size + 4)
+        self._page.insert_text(
+            (_MARGIN, self._y + size),
+            text,
+            fontsize=size,
+            fontname="helv",
+            color=(0.1, 0.1, 0.1),
         )
+        self._y += size + 4
+
+    def section(self, title: str) -> None:
+        self.gap(10)
+        self._ensure_space(20)
+        self._page.insert_text(
+            (_MARGIN, self._y + 11.5),
+            title.upper(),
+            fontsize=11.5,
+            fontname="hebo",
+            color=(0.1, 0.1, 0.1),
+        )
+        line_y = self._y + 14
+        self._page.draw_line(
+            fitz.Point(_MARGIN, line_y),
+            fitz.Point(_PAGE_WIDTH - _MARGIN, line_y),
+            color=(0.6, 0.6, 0.6),
+            width=0.5,
+        )
+        self._y = line_y + 8
+
+    def paragraph(self, text: str, *, size: float = 10.5, color=(0.1, 0.1, 0.1)) -> None:
+        if not text:
+            return
+        rect = fitz.Rect(_MARGIN, self._y, _MARGIN + _CONTENT_WIDTH, _PAGE_HEIGHT - _MARGIN)
+        used = self._page.insert_textbox(
+            rect,
+            text,
+            fontsize=size,
+            fontname="helv",
+            color=color,
+            align=fitz.TEXT_ALIGN_LEFT,
+        )
+        if used < 0:
+            self._ensure_space(14)
+            rect = fitz.Rect(_MARGIN, self._y, _MARGIN + _CONTENT_WIDTH, _PAGE_HEIGHT - _MARGIN)
+            used = self._page.insert_textbox(
+                rect,
+                text,
+                fontsize=size,
+                fontname="helv",
+                color=color,
+                align=fitz.TEXT_ALIGN_LEFT,
+            )
+        self._y += max(used, 14) + 2
+
+    def item_title(self, text: str) -> None:
+        self.gap(4)
+        self._ensure_space(12)
+        self._page.insert_text(
+            (_MARGIN, self._y + 10.5),
+            text,
+            fontsize=10.5,
+            fontname="hebo",
+            color=(0.1, 0.1, 0.1),
+        )
+        self._y += 12
+
+    def item_sub(self, text: str) -> None:
+        self.paragraph(text, size=9.5, color=(0.33, 0.33, 0.33))
+
+    def bullet(self, text: str) -> None:
+        self.paragraph(f"• {text}", size=10.5)
