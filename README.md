@@ -147,12 +147,6 @@ The Results page shows **10 jobs per page** by default (up to 15). Use Previous/
 
 API: `GET /jobs/matches/{run_id}?page=1&page_size=10`
 
-## Autonomous daily scan (optional)
-
-`services/scheduler.py` provides an APScheduler stub that runs the full pipeline
-each morning for the latest profile. Call `start_daily_scan()` from a
-long-running process to enable it.
-
 ## Roadmap (post-MVP)
 
 - Additional job sources (Naukri, Indeed, LinkedIn, company pages)
