@@ -109,6 +109,11 @@ def _row_to_job(row: JobRow) -> JobListing:
 def save_matches(run_id: int, matches: list[MatchResult], job_ids: dict[str, int]) -> None:
     """Persist match results. ``job_ids`` maps content_hash -> stored job id."""
     with get_session() as session:
+        existing = session.exec(
+            select(MatchRow).where(MatchRow.run_id == run_id)
+        ).all()
+        for row in existing:
+            session.delete(row)
         for match in matches:
             job_id = job_ids.get(match.job.content_hash)
             if job_id is None:
