@@ -207,13 +207,35 @@ def page_run() -> None:
         st.info("Upload a resume on the Profile page first.")
         return
 
+    try:
+        sources_resp = api_get("/jobs/sources").json()
+        source_options = [s["id"] for s in sources_resp.get("sources", [])]
+        source_labels = {
+            s["id"]: f"{s['name']} ({s['method']})" for s in sources_resp.get("sources", [])
+        }
+    except Exception:
+        source_options = ["all", "remotive", "wellfound", "indeed", "naukri"]
+        source_labels = {s: s for s in source_options}
+
     col1, col2, col3 = st.columns(3)
     top_n = col1.number_input("Top N jobs", 1, 15, 10)
-    source = col2.selectbox("Job source", ["remotive", "wellfound"])
+    source = col2.selectbox(
+        "Job source",
+        source_options,
+        index=source_options.index("all") if "all" in source_options else 0,
+        format_func=lambda x: source_labels.get(x, x),
+    )
     scrape_limit = col3.number_input("Scrape limit", 10, 300, 100, step=10)
     exclude_internships = st.checkbox("Exclude internships", value=False)
     strict_experience = st.checkbox("Strict experience matching", value=True)
-    allow_stretch = st.checkbox("Include stretch roles (+1 level)", value=False)
+    allow_stretch = st.checkbox("Include stretch roles", value=True)
+    flex_years = st.slider("Experience flexibility (+/- years)", 0, 5, 2)
+
+    with st.expander("Supported job boards"):
+        for sid in source_options:
+            if sid == "all":
+                continue
+            st.write(f"- **{source_labels.get(sid, sid)}**")
 
     if st.button("Run pipeline", type="primary"):
         resp = api_post(
@@ -226,6 +248,7 @@ def page_run() -> None:
                 "exclude_internships": exclude_internships,
                 "strict_experience": strict_experience,
                 "allow_stretch": allow_stretch,
+                "flex_years": int(flex_years),
             },
         )
         if resp.status_code != 200:
@@ -326,7 +349,7 @@ def page_results() -> None:
             posted_label = _format_posted_ago(m.get("posted_at"))
             st.caption(
                 f"{m['recommendation']} · {m.get('experience') or 'Level N/A'} · "
-                f"{m.get('location') or 'Location N/A'}"
+                f"{m.get('location') or 'Location N/A'} · source: {m.get('source', '—')}"
                 + (f" · {posted_label}" if posted_label else "")
             )
             cols = st.columns(2)
