@@ -61,6 +61,30 @@ def page_setup() -> None:
         return
     st.success("Backend is running.")
 
+    st.subheader("Daily auto-update")
+    try:
+        sched = api_get("/scheduler/status").json()
+        if sched.get("running"):
+            st.success(
+                f"Morning scan enabled — next run: {sched.get('next_run') or 'scheduled'}"
+            )
+        elif sched.get("enabled"):
+            st.info("Daily scan is enabled but scheduler is not running. Restart the API.")
+        else:
+            st.warning("Daily scan disabled. Set DAILY_SCAN_ENABLED=true in .env")
+
+        col1, col2 = st.columns(2)
+        col1.metric("Notifier", sched.get("notifier_backend", "local"))
+        wa_status = "Ready" if sched.get("whatsapp_configured") else "Not configured"
+        col2.metric("WhatsApp", wa_status)
+
+        preview = sched.get("latest_notification_preview")
+        if preview:
+            st.subheader("Last notification preview")
+            st.text(preview)
+    except Exception as exc:  # noqa: BLE001
+        st.warning(f"Could not load scheduler status: {exc}")
+
     st.subheader("Local AI (Ollama)")
     try:
         status = api_get("/ollama/status").json()
@@ -152,7 +176,7 @@ def page_run() -> None:
         return
 
     col1, col2, col3 = st.columns(3)
-    top_n = col1.number_input("Top N jobs", 1, 20, 5)
+    top_n = col1.number_input("Top N jobs", 1, 15, 10)
     source = col2.selectbox("Job source", ["remotive", "wellfound"])
     scrape_limit = col3.number_input("Scrape limit", 10, 300, 100, step=10)
     exclude_internships = st.checkbox("Exclude internships", value=False)
