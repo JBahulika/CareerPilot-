@@ -23,6 +23,11 @@ import requests
 from core.config import settings
 from core.logging import get_logger
 from models.schemas import JobListing, UserProfile
+from services.seniority import (
+    experience_label_for_job,
+    infer_candidate_tier,
+    is_job_compatible_with_profile,
+)
 
 logger = get_logger(__name__)
 
