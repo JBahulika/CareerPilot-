@@ -48,6 +48,9 @@ return ONLY valid JSON matching this schema:
 
 Rules:
 - Base the score on skills overlap, experience level, and role relevance.
+- Experience level is critical: compare candidate seniority to job seniority.
+- If the job requires 3+ more years of experience than the candidate has, set match_score below 30 and recommendation to "Skip".
+- Senior, Lead, Principal, Staff, or Director roles are a poor fit for Fresher / 0-1 year candidates — recommend "Skip".
 - Be honest about gaps; do not inflate scores.
 - Return JSON only, no commentary."""
 
