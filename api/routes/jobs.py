@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import math
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
 from agents.scraper_agent import JobScraperAgent
+from core.config import settings
 from core.logging import get_logger
 from database.repositories import (
     get_latest_profile,
@@ -39,6 +41,25 @@ def scrape_jobs(
 
 
 @router.get("/matches/{run_id}")
-def matches_for_run(run_id: int, top_n: int = Query(10, ge=1, le=50)) -> dict:
-    matches = get_matches_for_run(run_id)
-    return {"run_id": run_id, "count": len(matches), "matches": matches[:top_n]}
+def matches_for_run(
+    run_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(None, ge=1, le=50),
+    top_n: Optional[int] = Query(None, ge=1, le=50, deprecated=True),
+) -> dict:
+    """Paginated match results for a pipeline run."""
+    size = page_size or top_n or settings.display_page_size
+    size = min(size, settings.max_page_size)
+    offset = (page - 1) * size
+
+    matches, total = get_matches_for_run(run_id, offset=offset, limit=size)
+    total_pages = max(1, math.ceil(total / size)) if total else 1
+
+    return {
+        "run_id": run_id,
+        "total": total,
+        "page": page,
+        "page_size": size,
+        "total_pages": total_pages,
+        "matches": matches,
+    }
