@@ -297,23 +297,23 @@ def page_results() -> None:
                 f"{m.get('location') or 'Location N/A'}"
                 + (f" · {posted_label}" if posted_label else "")
             )
-                cols = st.columns(2)
-                cols[0].write("**Matched:** " + ", ".join(m.get("matched_skills", [])))
-                cols[1].write("**Missing:** " + ", ".join(m.get("missing_skills", [])))
-                if m.get("reasons"):
-                    st.write("\n".join(f"- {r}" for r in m["reasons"]))
-                if m.get("apply_url"):
-                    st.markdown(f"[Apply here]({m['apply_url']})")
-                pdf_path = m.get("generated_pdf_path")
-                if pdf_path and Path(pdf_path).exists():
-                    with open(pdf_path, "rb") as fh:
-                        st.download_button(
-                            "Download tailored resume",
-                            data=fh.read(),
-                            file_name=Path(pdf_path).name,
-                            mime="application/pdf",
-                            key=head,
-                        )
+            cols = st.columns(2)
+            cols[0].write("**Matched:** " + ", ".join(m.get("matched_skills", [])))
+            cols[1].write("**Missing:** " + ", ".join(m.get("missing_skills", [])))
+            if m.get("reasons"):
+                st.write("\n".join(f"- {r}" for r in m["reasons"]))
+            if m.get("apply_url"):
+                st.markdown(f"[Apply here]({m['apply_url']})")
+            pdf_path = m.get("generated_pdf_path")
+            if pdf_path and Path(pdf_path).exists():
+                with open(pdf_path, "rb") as fh:
+                    st.download_button(
+                        "Download tailored resume",
+                        data=fh.read(),
+                        file_name=Path(pdf_path).name,
+                        mime="application/pdf",
+                        key=head,
+                    )
 
 
 def page_history() -> None:
