@@ -38,6 +38,7 @@ def _daily_job() -> None:
         source=settings.job_source,
         strict_experience=True,
         allow_stretch=False,
+        include_remote=profile.include_remote,
     )
 
     matches, _ = get_matches_for_run(run_id, offset=0, limit=settings.top_n_jobs)

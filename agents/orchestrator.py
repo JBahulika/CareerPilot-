@@ -33,6 +33,16 @@ from models.schemas import JobListing, MatchResult, RunStatus, UserProfile
 logger = get_logger(__name__)
 
 
+def _resolve_profile(state: PipelineState) -> UserProfile:
+    """Apply run-time location overrides to a copy of the profile."""
+    profile = state["profile"]
+    if state.get("location"):
+        profile = profile.model_copy(update={"preferred_location": state["location"]})
+    if state.get("include_remote") is not None:
+        profile = profile.model_copy(update={"include_remote": state["include_remote"]})
+    return profile
+
+
 class PipelineState(TypedDict, total=False):
     run_id: int
     profile: UserProfile
@@ -43,6 +53,8 @@ class PipelineState(TypedDict, total=False):
     strict_experience: bool
     allow_stretch: bool
     flex_years: Optional[int]
+    location: Optional[str]
+    include_remote: Optional[bool]
     jobs: list[JobListing]
     filtered_jobs: list[JobListing]
     matches: list[MatchResult]
@@ -60,9 +72,10 @@ _pdf = PDFGeneratorAgent()
 
 def _scrape_node(state: PipelineState) -> PipelineState:
     update_run(state["run_id"], status=RunStatus.RUNNING.value, current_step="scrape")
+    profile = _resolve_profile(state)
     try:
         jobs = _scraper.run(
-            state["profile"],
+            profile,
             limit=state.get("scrape_limit", 100),
             source_name=state.get("source"),
             allow_stretch=state.get("allow_stretch", False),
@@ -78,10 +91,11 @@ def _scrape_node(state: PipelineState) -> PipelineState:
 
 def _filter_node(state: PipelineState) -> PipelineState:
     update_run(state["run_id"], current_step="filter")
+    profile = _resolve_profile(state)
     try:
         filtered = _filter.run(
             state.get("jobs", []),
-            state["profile"],
+            profile,
             exclude_internships=state.get("exclude_internships", False),
             strict_experience=state.get("strict_experience", True),
             allow_stretch=state.get("allow_stretch", False),
@@ -98,9 +112,10 @@ def _filter_node(state: PipelineState) -> PipelineState:
 
 def _match_node(state: PipelineState) -> PipelineState:
     update_run(state["run_id"], current_step="match")
+    profile = _resolve_profile(state)
     try:
         matches = _matcher.run(
-            state["profile"],
+            profile,
             state.get("filtered_jobs", []),
             top_n=state.get("top_n", settings.top_n_jobs),
             strict_experience=state.get("strict_experience", True),
@@ -180,6 +195,8 @@ def run_pipeline(
     strict_experience: bool = True,
     allow_stretch: bool = False,
     flex_years: Optional[int] = None,
+    location: Optional[str] = None,
+    include_remote: Optional[bool] = None,
 ) -> None:
     """Execute the full pipeline. Intended to run as a background task."""
     logger.info(f"Pipeline run {run_id} starting")
@@ -193,6 +210,8 @@ def run_pipeline(
         "strict_experience": strict_experience,
         "allow_stretch": allow_stretch,
         "flex_years": flex_years,
+        "location": location,
+        "include_remote": include_remote,
         "errors": [],
     }
     try:
