@@ -165,6 +165,30 @@ def page_profile() -> None:
         st.write("**Skills:** " + ", ".join(profile.get("skills", [])) or "—")
         st.write("**Preferred roles:** " + ", ".join(profile.get("preferred_roles", [])))
 
+        st.subheader("Location preferences")
+        default_loc = profile.get("preferred_location") or profile.get("location") or ""
+        preferred_loc = st.text_input(
+            "Preferred location",
+            value=default_loc,
+            placeholder="e.g. Bangalore, Remote, New York",
+        )
+        include_remote_profile = st.checkbox(
+            "Include remote jobs",
+            value=profile.get("include_remote", True),
+        )
+        if st.button("Save location preferences"):
+            profile["preferred_location"] = preferred_loc.strip()
+            profile["include_remote"] = include_remote_profile
+            profile_id = st.session_state.get("profile_id")
+            resp = api_put(f"/resume/{profile_id}", json=profile)
+            if resp.status_code == 200:
+                data = resp.json()
+                st.session_state["profile_id"] = data["profile_id"]
+                st.session_state["profile"] = data["profile"]
+                st.success("Saved location preferences.")
+            else:
+                st.error(resp.json().get("detail", "Could not save profile."))
+
         st.subheader("Experience range (flexible matching)")
         exp_col1, exp_col2, exp_col3 = st.columns(3)
         ymin = exp_col1.number_input(
@@ -226,6 +250,20 @@ def page_run() -> None:
         format_func=lambda x: source_labels.get(x, x),
     )
     scrape_limit = col3.number_input("Scrape limit", 10, 300, 100, step=10)
+
+    profile = st.session_state.get("profile") or {}
+    default_run_loc = profile.get("preferred_location") or profile.get("location") or ""
+    loc_col1, loc_col2 = st.columns(2)
+    run_location = loc_col1.text_input(
+        "Location (override for this run)",
+        value=default_run_loc,
+        placeholder="Leave as-is to use profile location",
+    )
+    include_remote = loc_col2.checkbox(
+        "Include remote jobs",
+        value=profile.get("include_remote", True),
+    )
+
     exclude_internships = st.checkbox("Exclude internships", value=False)
     strict_experience = st.checkbox("Strict experience matching", value=True)
     allow_stretch = st.checkbox("Include stretch roles", value=True)
