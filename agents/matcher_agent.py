@@ -24,6 +24,7 @@ from services.seniority import (
     infer_candidate_tier,
     infer_job_tier,
     is_compatible,
+    is_job_compatible_with_profile,
     job_seniority_label,
 )
 from services.vector_store import index_jobs, rank_by_similarity
@@ -57,6 +58,7 @@ class SemanticMatcherAgent:
         *,
         strict_experience: bool = True,
         allow_stretch: bool = False,
+        flex_years: int | None = None,
     ) -> list[MatchResult]:
         if not jobs:
             return []
@@ -67,10 +69,11 @@ class SemanticMatcherAgent:
             eligible = [
                 job
                 for job in jobs
-                if is_compatible(
-                    candidate_tier,
-                    infer_job_tier(job),
+                if is_job_compatible_with_profile(
+                    job,
+                    profile,
                     allow_stretch=allow_stretch,
+                    flex_years=flex_years,
                 )
             ]
             logger.info(
@@ -104,6 +107,7 @@ class SemanticMatcherAgent:
                 embed_score,
                 candidate_tier=candidate_tier,
                 allow_stretch=allow_stretch,
+                flex_years=flex_years,
             )
             results.append(match)
 
@@ -121,10 +125,11 @@ class SemanticMatcherAgent:
         *,
         candidate_tier: int,
         allow_stretch: bool = False,
+        flex_years: int | None = None,
     ) -> MatchResult:
         job_tier = infer_job_tier(job)
-        level_ok = is_compatible(
-            candidate_tier, job_tier, allow_stretch=allow_stretch
+        level_ok = is_job_compatible_with_profile(
+            job, profile, allow_stretch=allow_stretch, flex_years=flex_years
         )
 
         try:
