@@ -1,254 +1,22 @@
 """Job Scraper Agent (FR-3, FR-7).
 
-Uses a pluggable ``JobSource`` adapter so new sites can be added without
-touching pipeline logic. Two adapters ship with the MVP:
-
-- ``RemotiveSource``  : public JSON API, zero scraping (default, dev-friendly).
-- ``WellfoundSource`` : Playwright-driven scrape of Wellfound role search.
-
-All sources normalize results to ``JobListing`` and dedup via a content hash.
+Delegates to pluggable ``JobSource`` adapters in ``agents.job_sources``.
+Use ``source_name='all'`` to aggregate from every popular job board.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
-import re
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Protocol
 
-import requests
-
+from agents.job_sources.common import sort_and_filter_recent
+from agents.job_sources.registry import get_source, list_sources
 from core.config import settings
 from core.logging import get_logger
 from models.schemas import JobListing, UserProfile
-from services.seniority import (
-    experience_label_for_job,
-    infer_candidate_tier,
-    is_job_compatible_with_profile,
-)
 
 logger = get_logger(__name__)
-
-REMOTIVE_API = "https://remotive.com/api/remote-jobs"
-_HTML_TAG_RE = re.compile(r"<[^>]+>")
-
-
-def _content_hash(company: str, title: str, description: str) -> str:
-    raw = f"{company.strip().lower()}|{title.strip().lower()}|{description[:500].strip().lower()}"
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
-
-def _strip_html(text: str) -> str:
-    return _HTML_TAG_RE.sub(" ", text or "").replace("&nbsp;", " ").strip()
-
-
-def _parse_posted_at(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
-    except ValueError:
-        pass
-    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"):
-        try:
-            return datetime.strptime(value[:19], fmt)
-        except ValueError:
-            continue
-    return None
-
-
-def _sort_and_filter_recent(jobs: list[JobListing]) -> list[JobListing]:
-    """Sort newest first and optionally drop listings older than RECENT_JOBS_DAYS."""
-    now = datetime.utcnow()
-    for job in jobs:
-        if job.posted_at is None:
-            job.posted_at = job.scraped_at or now
-
-    jobs.sort(key=lambda j: j.posted_at or now, reverse=True)
-
-    days = settings.recent_jobs_days
-    if days and days > 0:
-        cutoff = now - timedelta(days=days)
-        jobs = [j for j in jobs if (j.posted_at or now) >= cutoff]
-    return jobs
-
-
-def _search_terms(profile: UserProfile) -> str:
-    terms = profile.preferred_roles or [profile.role]
-    base = " ".join(t for t in terms if t).strip() or "software engineer"
-    tier = infer_candidate_tier(profile)
-    if tier <= 1:
-        return f"{base} junior entry level graduate"
-    if tier == 2:
-        return f"{base} mid level"
-    return base
-
-
-def _annotate_and_filter_jobs(
-    jobs: list[JobListing],
-    profile: UserProfile,
-    *,
-    allow_stretch: bool = False,
-) -> list[JobListing]:
-    """Populate experience labels and drop level-incompatible listings."""
-    kept: list[JobListing] = []
-    for job in jobs:
-        job.experience = experience_label_for_job(job)
-        if is_job_compatible_with_profile(job, profile, allow_stretch=allow_stretch):
-            kept.append(job)
-        else:
-            logger.info(
-                f"Scraper: dropped '{job.title}' — level mismatch "
-                f"({job.experience})"
-            )
-    return kept
-
-
-class JobSource(Protocol):
-    name: str
-
-    def fetch(
-        self,
-        profile: UserProfile,
-        limit: int,
-        *,
-        allow_stretch: bool = False,
-    ) -> list[JobListing]:
-        ...
-
-
-class RemotiveSource:
-    name = "remotive"
-
-    def fetch(
-        self,
-        profile: UserProfile,
-        limit: int,
-        *,
-        allow_stretch: bool = False,
-    ) -> list[JobListing]:
-        query = _search_terms(profile)
-        logger.info(f"Remotive: searching '{query}' (limit {limit})")
-        try:
-            resp = requests.get(
-                REMOTIVE_API,
-                params={"search": query, "limit": limit},
-                timeout=30,
-            )
-            resp.raise_for_status()
-            raw_jobs = resp.json().get("jobs", [])
-        except Exception as exc:  # noqa: BLE001
-            logger.error(f"Remotive fetch failed: {exc}")
-            return []
-
-        jobs: list[JobListing] = []
-        now = datetime.utcnow()
-        for item in raw_jobs[:limit]:
-            description = _strip_html(item.get("description", ""))
-            company = item.get("company_name", "")
-            title = item.get("title", "")
-            posted = _parse_posted_at(item.get("publication_date")) or now
-            jobs.append(
-                JobListing(
-                    source=self.name,
-                    company=company,
-                    title=title,
-                    description=description,
-                    skills=item.get("tags", []) or [],
-                    location=item.get("candidate_required_location", "Remote"),
-                    salary=item.get("salary", "") or "",
-                    apply_url=item.get("url", ""),
-                    content_hash=_content_hash(company, title, description),
-                    posted_at=posted,
-                    scraped_at=now,
-                )
-            )
-        jobs = _annotate_and_filter_jobs(jobs, profile, allow_stretch=allow_stretch)
-        jobs = _sort_and_filter_recent(jobs)
-        logger.info(f"Remotive: fetched {len(jobs)} jobs after level filter")
-        return jobs
-
-
-class WellfoundSource:
-    """Best-effort Playwright scrape of Wellfound role search.
-
-    Wellfound is JS-heavy and rate-limited; failures degrade gracefully to an
-    empty list so the pipeline can fall back to Remotive.
-    """
-
-    name = "wellfound"
-
-    def fetch(
-        self,
-        profile: UserProfile,
-        limit: int,
-        *,
-        allow_stretch: bool = False,
-    ) -> list[JobListing]:
-        try:
-            from playwright.sync_api import sync_playwright
-        except ImportError:
-            logger.error("Playwright not installed; cannot use Wellfound source.")
-            return []
-
-        role_slug = (_search_terms(profile).split(" ")[0] or "engineer").lower()
-        url = f"https://wellfound.com/role/{role_slug}"
-        logger.info(f"Wellfound: scraping {url} (limit {limit})")
-
-        jobs: list[JobListing] = []
-        now = datetime.utcnow()
-        try:
-            with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
-                page = browser.new_page()
-                page.goto(url, timeout=45000, wait_until="domcontentloaded")
-                page.wait_for_timeout(4000)
-                cards = page.query_selector_all("[data-test='JobSearchResult'], .styles_component__Ns_gK")
-                for card in cards[:limit]:
-                    text = card.inner_text().strip()
-                    if not text:
-                        continue
-                    lines = [ln for ln in text.split("\n") if ln.strip()]
-                    title = lines[0] if lines else ""
-                    company = lines[1] if len(lines) > 1 else ""
-                    link_el = card.query_selector("a")
-                    apply_url = (link_el.get_attribute("href") or "") if link_el else ""
-                    if apply_url and apply_url.startswith("/"):
-                        apply_url = f"https://wellfound.com{apply_url}"
-                    jobs.append(
-                        JobListing(
-                            source=self.name,
-                            company=company,
-                            title=title,
-                            description=text,
-                            location="",
-                            apply_url=apply_url,
-                            content_hash=_content_hash(company, title, text),
-                            posted_at=now,
-                            scraped_at=now,
-                        )
-                    )
-                browser.close()
-        except Exception as exc:  # noqa: BLE001
-            logger.error(f"Wellfound scrape failed: {exc}")
-            return []
-
-        jobs = _annotate_and_filter_jobs(jobs, profile, allow_stretch=allow_stretch)
-        jobs = _sort_and_filter_recent(jobs)
-        logger.info(f"Wellfound: fetched {len(jobs)} jobs after level filter")
-        return jobs
-
-
-_SOURCES: dict[str, JobSource] = {
-    RemotiveSource.name: RemotiveSource(),
-    WellfoundSource.name: WellfoundSource(),
-}
-
-
-def get_source(name: str) -> JobSource:
-    return _SOURCES.get(name, _SOURCES["remotive"])
 
 
 class JobScraperAgent:
@@ -258,22 +26,34 @@ class JobScraperAgent:
         limit: int = 100,
         source_name: str | None = None,
         allow_stretch: bool = False,
+        flex_years: int | None = None,
     ) -> list[JobListing]:
         source_name = source_name or settings.job_source
+        flex = flex_years if flex_years is not None else settings.experience_flex_years
         source = get_source(source_name)
-        jobs = source.fetch(profile, limit, allow_stretch=allow_stretch)
+        logger.info(f"Scraping from source: {source.name}")
 
-        # Fall back to Remotive if the primary source returned nothing.
-        if not jobs and source_name != "remotive":
-            logger.warning(f"'{source_name}' returned no jobs; falling back to Remotive.")
-            jobs = get_source("remotive").fetch(
-                profile, limit, allow_stretch=allow_stretch
+        jobs = source.fetch(
+            profile,
+            limit,
+            allow_stretch=allow_stretch,
+            flex_years=flex,
+        )
+
+        if not jobs and source_name not in ("all", "remotive"):
+            logger.warning(f"'{source_name}' returned no jobs; falling back to aggregate.")
+            jobs = get_source("all").fetch(
+                profile, limit, allow_stretch=allow_stretch, flex_years=flex
             )
 
         jobs = self._dedup(jobs)
-        jobs = _sort_and_filter_recent(jobs)
+        jobs = sort_and_filter_recent(jobs)
         self._snapshot(jobs, source_name)
         return jobs
+
+    @staticmethod
+    def available_sources() -> list[dict[str, str]]:
+        return list_sources()
 
     @staticmethod
     def _dedup(jobs: list[JobListing]) -> list[JobListing]:
@@ -288,7 +68,6 @@ class JobScraperAgent:
 
     @staticmethod
     def _snapshot(jobs: list[JobListing], source_name: str) -> None:
-        """Persist a raw JSON snapshot for debugging."""
         stamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         path = Path(settings.jobs_dir) / f"{source_name}_{stamp}.json"
         try:
