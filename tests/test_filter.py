@@ -20,12 +20,15 @@ def _job(title: str, desc: str = "", location: str = "Remote", skills=None) -> J
 
 def test_dedup_removes_identical_jobs():
     job = _job("AI Engineer", "python ml")
-    kept = JobFilterAgent().run([job, job], UserProfile(skills=["python"]))
+    profile = UserProfile(skills=["python"], experience_level="3-5 years")
+    kept = JobFilterAgent().run([job, job], profile)
     assert len(kept) == 1
 
 
 def test_relevance_drops_unrelated_roles():
-    profile = UserProfile(skills=["python"], preferred_roles=["AI Engineer"])
+    profile = UserProfile(
+        skills=["python"], preferred_roles=["AI Engineer"], experience_level="3-5 years"
+    )
     jobs = [_job("AI Engineer", "python required"), _job("Truck Driver", "cdl license")]
     kept = JobFilterAgent().run(jobs, profile)
     titles = [j.title for j in kept]
@@ -41,7 +44,9 @@ def test_exclude_internships():
 
 
 def test_location_preference_allows_remote():
-    profile = UserProfile(skills=["python"], preferred_location="Bangalore")
+    profile = UserProfile(
+        skills=["python"], preferred_location="Bangalore", experience_level="3-5 years"
+    )
     jobs = [_job("Python Engineer", "python", location="Remote")]
     kept = JobFilterAgent().run(jobs, profile)
     assert len(kept) == 1

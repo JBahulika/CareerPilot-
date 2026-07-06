@@ -33,16 +33,7 @@ _ALLOWED_ABOVE: dict[int, int] = {
 _SENIOR_TITLE_PATTERNS = [
     r"\bsenior\b",
     r"\bsr\.?\b",
-    r"\blead\b",
-    r"\bprincipal\b",
-    r"\bstaff\b",
     r"\barchitect\b",
-    r"\bdirector\b",
-    r"\bhead of\b",
-    r"\bvp\b",
-    r"\bvice president\b",
-    r"\bengineering manager\b",
-    r"\btech lead\b",
 ]
 
 _ENTRY_TITLE_PATTERNS = [
@@ -196,12 +187,19 @@ def infer_job_tier_from_text(title: str, description: str = "") -> int:
     else:
         tier_from_years = None
 
-    # Title-based signals.
+    # Title-based signals (check lead/staff before generic senior).
     if _text_has_any(lowered, [r"\bexecutive\b", r"\bvp\b", r"\bvice president\b"]):
         title_tier = 5
     elif _text_has_any(
         lowered,
-        [r"\bprincipal\b", r"\bstaff\b", r"\btech lead\b", r"\bdirector\b", r"\bhead of\b"],
+        [
+            r"\bprincipal\b",
+            r"\bstaff\b",
+            r"\btech lead\b",
+            r"\bdirector\b",
+            r"\bhead of\b",
+            r"\blead\b",
+        ],
     ):
         title_tier = 4
     elif _text_has_any(lowered, _SENIOR_TITLE_PATTERNS):

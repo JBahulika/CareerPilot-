@@ -48,7 +48,9 @@ def test_remotive_parses_fixture(monkeypatch):
         "agents.scraper_agent.requests.get", lambda *a, **k: _Resp()
     )
 
-    jobs = RemotiveSource().fetch(UserProfile(role="AI Engineer"), limit=10)
+    jobs = RemotiveSource().fetch(
+        UserProfile(role="AI Engineer", experience_level="3-5 years"), limit=10
+    )
     assert len(jobs) == 1
     job = jobs[0]
     assert job.company == "Acme"
