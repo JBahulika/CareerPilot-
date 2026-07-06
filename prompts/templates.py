@@ -27,6 +27,9 @@ this schema:
 Rules:
 - Extract only what is present. Do not invent facts.
 - If a field is missing, use an empty string or empty list.
+- Classify experience_level as exactly one of: "Fresher", "0-1 years", "1-3 years", "3-5 years", "5+ years".
+- If the resume lists no full-time work experience, experience_level must be "Fresher" or "0-1 years".
+- Count internships and academic projects toward skills, not toward years of professional experience.
 - Infer preferred_roles from the candidate's skills and experience.
 - Return JSON only, no commentary."""
 
