@@ -112,6 +112,41 @@ main.py       # FastAPI entry point
 pytest
 ```
 
+## Autonomous daily scan
+
+When `DAILY_SCAN_ENABLED=true` (default), the API starts a morning cron job that:
+
+1. Runs the **full pipeline** for your latest profile (top 10 jobs with tailored PDFs)
+2. Prioritizes jobs posted in the last 7 days (`RECENT_JOBS_DAYS`)
+3. Writes a digest to `logs/notifications/` (or sends WhatsApp when configured)
+
+Check status: `GET /scheduler/status` or the **Setup** page in Streamlit.
+
+```env
+DAILY_SCAN_ENABLED=true
+DAILY_SCAN_HOUR=8
+DAILY_SCAN_MINUTE=0
+NOTIFIER_BACKEND=local   # switch to whatsapp when ready
+```
+
+### WhatsApp (coming soon)
+
+Set these when your Meta WhatsApp Cloud API credentials are ready:
+
+```env
+NOTIFIER_BACKEND=whatsapp
+WHATSAPP_ENABLED=true
+WHATSAPP_TOKEN=your_token
+WHATSAPP_PHONE_ID=your_phone_id
+WHATSAPP_RECIPIENT=+91XXXXXXXXXX
+```
+
+## Results pagination
+
+The Results page shows **10 jobs per page** by default (up to 15). Use Previous/Next to browse all matches from a run.
+
+API: `GET /jobs/matches/{run_id}?page=1&page_size=10`
+
 ## Autonomous daily scan (optional)
 
 `services/scheduler.py` provides an APScheduler stub that runs the full pipeline
