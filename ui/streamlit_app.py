@@ -276,19 +276,20 @@ def page_run() -> None:
             st.write(f"- **{source_labels.get(sid, sid)}**")
 
     if st.button("Run pipeline", type="primary"):
-        resp = api_post(
-            "/pipeline/run",
-            json={
-                "profile_id": profile_id,
-                "top_n": int(top_n),
-                "source": source,
-                "scrape_limit": int(scrape_limit),
-                "exclude_internships": exclude_internships,
-                "strict_experience": strict_experience,
-                "allow_stretch": allow_stretch,
-                "flex_years": int(flex_years),
-            },
-        )
+        payload = {
+            "profile_id": profile_id,
+            "top_n": int(top_n),
+            "source": source,
+            "scrape_limit": int(scrape_limit),
+            "exclude_internships": exclude_internships,
+            "strict_experience": strict_experience,
+            "allow_stretch": allow_stretch,
+            "flex_years": int(flex_years),
+            "include_remote": include_remote,
+        }
+        if run_location.strip():
+            payload["location"] = run_location.strip()
+        resp = api_post("/pipeline/run", json=payload)
         if resp.status_code != 200:
             st.error(resp.json().get("detail", "Could not start pipeline."))
             return
