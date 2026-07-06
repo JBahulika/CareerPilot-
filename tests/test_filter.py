@@ -52,6 +52,37 @@ def test_location_preference_allows_remote():
     assert len(kept) == 1
 
 
+def test_location_fallback_to_resume_location():
+    profile = UserProfile(
+        skills=["python"],
+        location="Bangalore",
+        experience_level="3-5 years",
+    )
+    jobs = [
+        _job("Python Engineer", "python", location="Bangalore"),
+        _job("Python Engineer", "python", location="Chennai"),
+    ]
+    kept = JobFilterAgent().run(jobs, profile)
+    assert len(kept) == 1
+    assert kept[0].location == "Bangalore"
+
+
+def test_include_remote_false_drops_remote_jobs():
+    profile = UserProfile(
+        skills=["python"],
+        preferred_location="Bangalore",
+        include_remote=False,
+        experience_level="3-5 years",
+    )
+    jobs = [
+        _job("Python Engineer", "python", location="Remote"),
+        _job("Python Engineer", "python", location="Bangalore"),
+    ]
+    kept = JobFilterAgent().run(jobs, profile)
+    assert len(kept) == 1
+    assert kept[0].location == "Bangalore"
+
+
 def test_fresher_profile_rejects_senior_jobs():
     profile = UserProfile(experience_level="Fresher", skills=["python", "machine learning"])
     jobs = [

@@ -89,6 +89,7 @@ All settings live in `.env` (see [`.env.example`](.env.example)):
 - `OLLAMA_MODEL` — local model tag (default `qwen2.5:7b`).
 - `JOB_SOURCE` — `all` (default, aggregates every source below) or a single site id.
 - `EXPERIENCE_FLEX_YEARS` — +/- years around your target range when matching jobs.
+- `DEFAULT_INCLUDE_REMOTE` — include remote jobs when filtering by location (default `true`).
 - `TOP_N_JOBS` — number of jobs to tailor resumes for.
 - `EMBEDDING_MODEL`, `CHROMA_PATH`, `DATABASE_URL`.
 
