@@ -44,7 +44,35 @@ def _strip_html(text: str) -> str:
     return _HTML_TAG_RE.sub(" ", text or "").replace("&nbsp;", " ").strip()
 
 
-def _search_terms(profile: UserProfile) -> str:
+def _parse_posted_at(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+    except ValueError:
+        pass
+    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(value[:19], fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _sort_and_filter_recent(jobs: list[JobListing]) -> list[JobListing]:
+    """Sort newest first and optionally drop listings older than RECENT_JOBS_DAYS."""
+    now = datetime.utcnow()
+    for job in jobs:
+        if job.posted_at is None:
+            job.posted_at = job.scraped_at or now
+
+    jobs.sort(key=lambda j: j.posted_at or now, reverse=True)
+
+    days = settings.recent_jobs_days
+    if days and days > 0:
+        cutoff = now - timedelta(days=days)
+        jobs = [j for j in jobs if (j.posted_at or now) >= cutoff]
+    return jobs
     terms = profile.preferred_roles or [profile.role]
     base = " ".join(t for t in terms if t).strip() or "software engineer"
     tier = infer_candidate_tier(profile)
