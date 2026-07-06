@@ -139,6 +139,7 @@ def get_matches_for_run(run_id: int) -> list[dict]:
                     "company": job_row.company,
                     "title": job_row.title,
                     "location": job_row.location,
+                    "experience": job_row.experience,
                     "apply_url": job_row.apply_url,
                     "match_score": match_row.match_score,
                     "matched_skills": match_row.matched_skills_json,

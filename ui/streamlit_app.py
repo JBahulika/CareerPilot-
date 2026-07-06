@@ -109,9 +109,34 @@ def page_profile() -> None:
 
     if profile:
         st.subheader("Parsed profile")
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         col1.metric("Name", profile.get("name") or "—")
         col2.metric("Role", profile.get("role") or "—")
+        col3.metric("Experience", profile.get("experience_level") or "—")
+
+        current_level = profile.get("experience_level") or "Fresher"
+        if current_level not in EXPERIENCE_LEVEL_OPTIONS:
+            EXPERIENCE_LEVEL_OPTIONS_WITH_CURRENT = [current_level, *EXPERIENCE_LEVEL_OPTIONS]
+        else:
+            EXPERIENCE_LEVEL_OPTIONS_WITH_CURRENT = EXPERIENCE_LEVEL_OPTIONS
+
+        selected_level = st.selectbox(
+            "Experience level (edit if the parser got it wrong)",
+            EXPERIENCE_LEVEL_OPTIONS_WITH_CURRENT,
+            index=EXPERIENCE_LEVEL_OPTIONS_WITH_CURRENT.index(current_level),
+        )
+        if selected_level != current_level and st.button("Save experience level"):
+            profile["experience_level"] = selected_level
+            profile_id = st.session_state.get("profile_id")
+            resp = api_put(f"/resume/{profile_id}", json=profile)
+            if resp.status_code == 200:
+                data = resp.json()
+                st.session_state["profile_id"] = data["profile_id"]
+                st.session_state["profile"] = data["profile"]
+                st.success(f"Updated experience level to '{selected_level}'.")
+            else:
+                st.error(resp.json().get("detail", "Could not save profile."))
+
         st.write("**Skills:** " + ", ".join(profile.get("skills", [])) or "—")
         st.write("**Preferred roles:** " + ", ".join(profile.get("preferred_roles", [])))
         with st.expander("Full parsed JSON"):
@@ -130,6 +155,8 @@ def page_run() -> None:
     source = col2.selectbox("Job source", ["remotive", "wellfound"])
     scrape_limit = col3.number_input("Scrape limit", 10, 300, 100, step=10)
     exclude_internships = st.checkbox("Exclude internships", value=False)
+    strict_experience = st.checkbox("Strict experience matching", value=True)
+    allow_stretch = st.checkbox("Include stretch roles (+1 level)", value=False)
 
     if st.button("Run pipeline", type="primary"):
         resp = api_post(
@@ -140,6 +167,8 @@ def page_run() -> None:
                 "source": source,
                 "scrape_limit": int(scrape_limit),
                 "exclude_internships": exclude_internships,
+                "strict_experience": strict_experience,
+                "allow_stretch": allow_stretch,
             },
         )
         if resp.status_code != 200:
@@ -195,7 +224,10 @@ def page_results() -> None:
             with st.container(border=True):
                 head = f"{m['title']} — {m['company']}  ·  Match {m['match_score']}%"
                 st.subheader(head)
-                st.caption(f"{m['recommendation']} · {m.get('location') or 'Location N/A'}")
+                st.caption(
+                    f"{m['recommendation']} · {m.get('experience') or 'Level N/A'} · "
+                    f"{m.get('location') or 'Location N/A'}"
+                )
                 cols = st.columns(2)
                 cols[0].write("**Matched:** " + ", ".join(m.get("matched_skills", [])))
                 cols[1].write("**Missing:** " + ", ".join(m.get("missing_skills", [])))
