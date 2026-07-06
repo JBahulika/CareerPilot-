@@ -29,6 +29,7 @@ class RunRequest(BaseModel):
     exclude_internships: bool = False
     strict_experience: bool = True
     allow_stretch: bool = False
+    flex_years: Optional[int] = None
 
 
 @router.post("/run")
@@ -48,6 +49,7 @@ def start_pipeline(request: RunRequest, background_tasks: BackgroundTasks) -> di
         exclude_internships=request.exclude_internships,
         strict_experience=request.strict_experience,
         allow_stretch=request.allow_stretch,
+        flex_years=request.flex_years,
     )
     return {"run_id": run_id, "status": "pending"}
 

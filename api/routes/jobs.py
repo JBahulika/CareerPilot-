@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 
 from agents.scraper_agent import JobScraperAgent
+from agents.job_sources.registry import list_sources
 from core.config import settings
 from core.logging import get_logger
 from database.repositories import (
@@ -19,6 +20,11 @@ from database.repositories import (
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 logger = get_logger(__name__)
 _scraper = JobScraperAgent()
+
+
+@router.get("/sources")
+def job_sources() -> dict:
+    return {"sources": list_sources()}
 
 
 @router.post("/scrape")
