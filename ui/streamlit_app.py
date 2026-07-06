@@ -27,6 +27,19 @@ def api_post(path: str, **kwargs):
     return httpx.post(f"{API_BASE_URL}{path}", timeout=600, **kwargs)
 
 
+def api_put(path: str, **kwargs):
+    return httpx.put(f"{API_BASE_URL}{path}", timeout=60, **kwargs)
+
+
+EXPERIENCE_LEVEL_OPTIONS = [
+    "Fresher",
+    "0-1 years",
+    "1-3 years",
+    "3-5 years",
+    "5+ years",
+]
+
+
 def _api_reachable() -> bool:
     try:
         return api_get("/health").status_code == 200
