@@ -2,13 +2,20 @@
 
 Removes duplicates and clearly irrelevant listings before the (more expensive)
 semantic matching stage. Keeps the logic cheap: hash dedup, keyword relevance,
-optional internship exclusion, and location preference.
+optional internship exclusion, location preference, and experience-level gating.
 """
 
 from __future__ import annotations
 
 from core.logging import get_logger
 from models.schemas import JobListing, UserProfile
+from services.seniority import (
+    candidate_tier_label,
+    infer_candidate_tier,
+    infer_job_tier,
+    is_compatible,
+    job_seniority_label,
+)
 
 logger = get_logger(__name__)
 
@@ -21,9 +28,12 @@ class JobFilterAgent:
         jobs: list[JobListing],
         profile: UserProfile,
         exclude_internships: bool = False,
+        strict_experience: bool = True,
+        allow_stretch: bool = False,
     ) -> list[JobListing]:
         seen: set[str] = set()
         kept: list[JobListing] = []
+        candidate_tier = infer_candidate_tier(profile)
 
         profile_terms = self._profile_terms(profile)
 
@@ -35,6 +45,11 @@ class JobFilterAgent:
             if exclude_internships and self._is_internship(job):
                 continue
 
+            if strict_experience and not self._experience_level_ok(
+                job, candidate_tier, allow_stretch=allow_stretch
+            ):
+                continue
+
             if profile_terms and not self._is_relevant(job, profile_terms):
                 continue
 
@@ -43,8 +58,28 @@ class JobFilterAgent:
 
             kept.append(job)
 
-        logger.info(f"Filter: {len(jobs)} -> {len(kept)} jobs")
+        logger.info(
+            f"Filter: {len(jobs)} -> {len(kept)} jobs "
+            f"(candidate tier: {candidate_tier_label(candidate_tier)})"
+        )
         return kept
+
+    @staticmethod
+    def _experience_level_ok(
+        job: JobListing,
+        candidate_tier: int,
+        *,
+        allow_stretch: bool = False,
+    ) -> bool:
+        job_tier = infer_job_tier(job)
+        if is_compatible(candidate_tier, job_tier, allow_stretch=allow_stretch):
+            return True
+        logger.info(
+            f"Filter: dropped '{job.title}' — level mismatch "
+            f"(candidate: {candidate_tier_label(candidate_tier)}, "
+            f"job: {job_seniority_label(job)})"
+        )
+        return False
 
     @staticmethod
     def _profile_terms(profile: UserProfile) -> set[str]:

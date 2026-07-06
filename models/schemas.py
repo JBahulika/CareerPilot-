@@ -50,11 +50,20 @@ class UserProfile(BaseModel):
     preferred_roles: list[str] = Field(default_factory=list)
     preferred_location: str = ""
 
+    def experience_tier(self) -> int:
+        """Numeric seniority tier (0=intern/fresher .. 5=executive)."""
+        from services.seniority import infer_candidate_tier
+
+        return infer_candidate_tier(self)
+
     def summary_text(self) -> str:
         """Compact text used for embedding the profile."""
+        from services.seniority import candidate_tier_label
+
         parts = [
             f"Role: {self.role}",
             f"Experience: {self.experience_level}",
+            f"Seniority: {candidate_tier_label(self.experience_tier())}",
             f"Skills: {', '.join(self.skills)}",
             f"Preferred roles: {', '.join(self.preferred_roles)}",
             f"Location: {self.preferred_location or self.location}",
@@ -83,8 +92,10 @@ class JobListing(BaseModel):
 
     def match_text(self) -> str:
         """Text used for embedding and LLM matching."""
+        seniority = self.experience or "Not specified"
         return (
             f"{self.title} at {self.company}\n"
+            f"Seniority: {seniority}\n"
             f"Location: {self.location}\n"
             f"Skills: {', '.join(self.skills)}\n"
             f"{self.description}"
