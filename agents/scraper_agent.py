@@ -73,6 +73,9 @@ def _sort_and_filter_recent(jobs: list[JobListing]) -> list[JobListing]:
         cutoff = now - timedelta(days=days)
         jobs = [j for j in jobs if (j.posted_at or now) >= cutoff]
     return jobs
+
+
+def _search_terms(profile: UserProfile) -> str:
     terms = profile.preferred_roles or [profile.role]
     base = " ".join(t for t in terms if t).strip() or "software engineer"
     tier = infer_candidate_tier(profile)
