@@ -205,15 +205,18 @@ class JobScraperAgent:
         profile: UserProfile,
         limit: int = 100,
         source_name: str | None = None,
+        allow_stretch: bool = False,
     ) -> list[JobListing]:
         source_name = source_name or settings.job_source
         source = get_source(source_name)
-        jobs = source.fetch(profile, limit)
+        jobs = source.fetch(profile, limit, allow_stretch=allow_stretch)
 
         # Fall back to Remotive if the primary source returned nothing.
         if not jobs and source_name != "remotive":
             logger.warning(f"'{source_name}' returned no jobs; falling back to Remotive.")
-            jobs = get_source("remotive").fetch(profile, limit)
+            jobs = get_source("remotive").fetch(
+                profile, limit, allow_stretch=allow_stretch
+            )
 
         jobs = self._dedup(jobs)
         self._snapshot(jobs, source_name)
