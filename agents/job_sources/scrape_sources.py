@@ -8,6 +8,7 @@ from urllib.parse import quote_plus
 from agents.job_sources.common import (
     annotate_and_filter_jobs,
     build_job,
+    search_location,
     search_terms,
     sort_and_filter_recent,
 )
@@ -47,6 +48,7 @@ def _playwright_fetch_cards(url: str, selectors: list[str], limit: int) -> list[
                     {
                         "title": lines[0] if lines else "",
                         "company": lines[1] if len(lines) > 1 else "",
+                        "location": lines[2] if len(lines) > 2 else "",
                         "description": text,
                         "apply_url": href,
                     }
@@ -89,6 +91,7 @@ class WellfoundSource:
                     company=card["company"],
                     title=card["title"],
                     description=card["description"],
+                    location=card.get("location", ""),
                     apply_url=apply_url,
                     posted_at=now,
                 )
@@ -101,7 +104,10 @@ class IndeedSource:
 
     def fetch(self, profile, limit, *, allow_stretch=False, flex_years=None) -> list[JobListing]:
         query = quote_plus(search_terms(profile))
+        loc = search_location(profile)
         url = f"https://www.indeed.com/jobs?q={query}&sort=date"
+        if loc:
+            url += f"&l={quote_plus(loc)}"
         cards = _playwright_fetch_cards(
             url,
             [".job_seen_beacon", ".jobsearch-ResultsList li", "div[data-jk]"],
@@ -113,7 +119,7 @@ class IndeedSource:
                 company=card["company"],
                 title=card["title"],
                 description=card["description"],
-                location="",
+                location=card.get("location", ""),
                 apply_url=f"https://www.indeed.com{card['apply_url']}"
                 if card["apply_url"].startswith("/")
                 else card["apply_url"],
@@ -128,7 +134,13 @@ class NaukriSource:
 
     def fetch(self, profile, limit, *, allow_stretch=False, flex_years=None) -> list[JobListing]:
         query = quote_plus(search_terms(profile))
-        url = f"https://www.naukri.com/{query.replace('+', '-')}-jobs"
+        loc = search_location(profile)
+        slug = query.replace("+", "-")
+        if loc:
+            loc_slug = quote_plus(loc).replace("+", "-").lower()
+            url = f"https://www.naukri.com/{slug}-jobs-in-{loc_slug}"
+        else:
+            url = f"https://www.naukri.com/{slug}-jobs"
         cards = _playwright_fetch_cards(
             url,
             [".cust-job-tuple", ".srp-jobtuple-wrapper", "article.jobTuple"],
@@ -140,7 +152,7 @@ class NaukriSource:
                 company=card["company"],
                 title=card["title"],
                 description=card["description"],
-                location="India",
+                location=card.get("location") or (loc or "India"),
                 apply_url=card["apply_url"] if card["apply_url"].startswith("http") else f"https://www.naukri.com{card['apply_url']}",
             )
             for card in cards
@@ -153,7 +165,10 @@ class LinkedInSource:
 
     def fetch(self, profile, limit, *, allow_stretch=False, flex_years=None) -> list[JobListing]:
         query = quote_plus(search_terms(profile))
+        loc = search_location(profile)
         url = f"https://www.linkedin.com/jobs/search/?keywords={query}&sortBy=DD"
+        if loc:
+            url += f"&location={quote_plus(loc)}"
         cards = _playwright_fetch_cards(
             url,
             [".base-card", "li.jobs-search__results-list div", "div.job-search-card"],
@@ -165,6 +180,7 @@ class LinkedInSource:
                 company=card["company"],
                 title=card["title"],
                 description=card["description"],
+                location=card.get("location", ""),
                 apply_url=card["apply_url"] if card["apply_url"].startswith("http") else "",
             )
             for card in cards
@@ -177,7 +193,10 @@ class GlassdoorSource:
 
     def fetch(self, profile, limit, *, allow_stretch=False, flex_years=None) -> list[JobListing]:
         query = quote_plus(search_terms(profile))
+        loc = search_location(profile)
         url = f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={query}&sortBy=date"
+        if loc:
+            url += f"&locKeyword={quote_plus(loc)}"
         cards = _playwright_fetch_cards(
             url,
             ["li.react-job-listing", "article.JobCard", "div[data-test='jobListing']"],
@@ -189,6 +208,7 @@ class GlassdoorSource:
                 company=card["company"],
                 title=card["title"],
                 description=card["description"],
+                location=card.get("location", ""),
                 apply_url=card["apply_url"] if card["apply_url"].startswith("http") else "",
             )
             for card in cards

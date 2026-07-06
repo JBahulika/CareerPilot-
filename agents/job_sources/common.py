@@ -13,6 +13,7 @@ from services.seniority import (
     infer_candidate_tier,
     is_job_compatible_with_profile,
 )
+from services.location import effective_location, location_filter_ok
 
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
 
@@ -58,6 +59,10 @@ def search_terms(profile: UserProfile) -> str:
     return base
 
 
+def search_location(profile: UserProfile) -> str:
+    return effective_location(profile)
+
+
 def sort_and_filter_recent(jobs: list[JobListing]) -> list[JobListing]:
     now = datetime.utcnow()
     for job in jobs:
@@ -79,12 +84,18 @@ def annotate_and_filter_jobs(
     flex_years: int | None = None,
 ) -> list[JobListing]:
     kept: list[JobListing] = []
+    pref = search_location(profile)
     for job in jobs:
         job.experience = experience_label_for_job(job)
-        if is_job_compatible_with_profile(
+        if not is_job_compatible_with_profile(
             job, profile, allow_stretch=allow_stretch, flex_years=flex_years
         ):
-            kept.append(job)
+            continue
+        if not location_filter_ok(
+            job, pref, include_remote=profile.include_remote
+        ):
+            continue
+        kept.append(job)
     return kept
 
 
