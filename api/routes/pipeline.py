@@ -27,6 +27,8 @@ class RunRequest(BaseModel):
     source: Optional[str] = None
     scrape_limit: int = 100
     exclude_internships: bool = False
+    strict_experience: bool = True
+    allow_stretch: bool = False
 
 
 @router.post("/run")
@@ -44,6 +46,8 @@ def start_pipeline(request: RunRequest, background_tasks: BackgroundTasks) -> di
         source=request.source,
         scrape_limit=request.scrape_limit,
         exclude_internships=request.exclude_internships,
+        strict_experience=request.strict_experience,
+        allow_stretch=request.allow_stretch,
     )
     return {"run_id": run_id, "status": "pending"}
 
