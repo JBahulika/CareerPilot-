@@ -283,13 +283,14 @@ def is_compatible(
     job_tier: int,
     *,
     allow_stretch: bool = False,
+    flex_tiers: int = 0,
 ) -> bool:
     """Return True when the job tier is within the candidate's allowed band."""
     stretch = 1 if allow_stretch else 0
-    max_allowed = candidate_tier + _ALLOWED_ABOVE.get(candidate_tier, 1) + stretch
-    # Candidates should not be matched to jobs clearly below their level either,
-    # except entry candidates who may still see intern roles.
-    min_allowed = 0 if candidate_tier <= 1 else max(0, candidate_tier - 2)
+    extra = flex_tiers + stretch
+    max_allowed = candidate_tier + _ALLOWED_ABOVE.get(candidate_tier, 2) + extra
+    below = _ALLOWED_BELOW.get(candidate_tier, 1)
+    min_allowed = 0 if candidate_tier <= 1 else max(0, candidate_tier - below - extra)
     return min_allowed <= job_tier <= max_allowed
 
 
@@ -318,9 +319,17 @@ def is_job_compatible_with_profile(
     profile: UserProfile,
     *,
     allow_stretch: bool = False,
+    flex_years: int | None = None,
 ) -> bool:
-    return is_compatible(
+    from core.config import settings
+
+    flex = flex_years if flex_years is not None else settings.experience_flex_years
+    tier_ok = is_compatible(
         infer_candidate_tier(profile),
         infer_job_tier(job),
         allow_stretch=allow_stretch,
     )
+    years_ok = is_years_compatible(
+        profile, job, flex_years=flex, allow_stretch=allow_stretch
+    )
+    return tier_ok or years_ok

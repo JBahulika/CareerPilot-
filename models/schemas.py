@@ -49,6 +49,8 @@ class UserProfile(BaseModel):
     certifications: list[str] = Field(default_factory=list)
     preferred_roles: list[str] = Field(default_factory=list)
     preferred_location: str = ""
+    target_years_min: Optional[int] = None
+    target_years_max: Optional[int] = None
 
     def experience_tier(self) -> int:
         """Numeric seniority tier (0=intern/fresher .. 5=executive)."""
@@ -64,6 +66,7 @@ class UserProfile(BaseModel):
             f"Role: {self.role}",
             f"Experience: {self.experience_level}",
             f"Seniority: {candidate_tier_label(self.experience_tier())}",
+            f"Target years: {self.target_years_min or 'auto'}-{self.target_years_max or 'auto'}",
             f"Skills: {', '.join(self.skills)}",
             f"Preferred roles: {', '.join(self.preferred_roles)}",
             f"Location: {self.preferred_location or self.location}",

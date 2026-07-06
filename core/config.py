@@ -29,10 +29,11 @@ class Settings(BaseSettings):
 
     # Pipeline
     top_n_jobs: int = 10
-    job_source: str = "remotive"  # "remotive" | "wellfound"
+    job_source: str = "all"  # "all" | remotive | wellfound | indeed | ...
     display_page_size: int = 10
     max_page_size: int = 15
     recent_jobs_days: int = 7
+    experience_flex_years: int = 2
 
     # Daily scan
     daily_scan_enabled: bool = True
