@@ -111,11 +111,7 @@ class JobFilterAgent:
 
     @staticmethod
     def _location_ok(job: JobListing, profile: UserProfile) -> bool:
-        pref = (profile.preferred_location or "").strip().lower()
-        if not pref:
-            return True
-        location = job.location.lower()
-        # Remote roles always pass; otherwise require a location overlap.
-        if "remote" in location or "anywhere" in location:
-            return True
-        return pref in location or location in pref
+        pref = effective_location(profile)
+        return location_filter_ok(
+            job, pref, include_remote=profile.include_remote
+        )
