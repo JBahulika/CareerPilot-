@@ -126,16 +126,29 @@ def save_matches(run_id: int, matches: list[MatchResult], job_ids: dict[str, int
             session.add(row)
 
 
-def get_matches_for_run(run_id: int) -> list[dict]:
+def get_matches_for_run(
+    run_id: int,
+    *,
+    offset: int = 0,
+    limit: Optional[int] = None,
+) -> tuple[list[dict], int]:
     with get_session() as session:
-        rows = session.exec(
+        base_query = (
             select(MatchRow, JobRow)
             .join(JobRow, MatchRow.job_id == JobRow.id)
             .where(MatchRow.run_id == run_id)
             .order_by(MatchRow.match_score.desc())
-        ).all()
+        )
+        rows = session.exec(base_query).all()
+        total = len(rows)
+        if offset:
+            rows = rows[offset:]
+        if limit is not None:
+            rows = rows[:limit]
+
         results = []
         for match_row, job_row in rows:
+            posted = job_row.posted_at or job_row.scraped_at
             results.append(
                 {
                     "company": job_row.company,
@@ -143,6 +156,7 @@ def get_matches_for_run(run_id: int) -> list[dict]:
                     "location": job_row.location,
                     "experience": job_row.experience,
                     "apply_url": job_row.apply_url,
+                    "posted_at": posted.isoformat() if posted else None,
                     "match_score": match_row.match_score,
                     "matched_skills": match_row.matched_skills_json,
                     "missing_skills": match_row.missing_skills_json,
@@ -151,7 +165,7 @@ def get_matches_for_run(run_id: int) -> list[dict]:
                     "generated_pdf_path": match_row.generated_pdf_path,
                 }
             )
-        return results
+        return results, total
 
 
 # --- Pipeline runs ------------------------------------------------------------
