@@ -13,6 +13,7 @@ from services.seniority import (
     candidate_tier_label,
     infer_candidate_tier,
 )
+from services.location import effective_location, location_filter_ok
 
 logger = get_logger(__name__)
 
