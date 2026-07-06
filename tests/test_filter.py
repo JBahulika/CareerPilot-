@@ -45,3 +45,24 @@ def test_location_preference_allows_remote():
     jobs = [_job("Python Engineer", "python", location="Remote")]
     kept = JobFilterAgent().run(jobs, profile)
     assert len(kept) == 1
+
+
+def test_fresher_profile_rejects_senior_jobs():
+    profile = UserProfile(experience_level="Fresher", skills=["python", "machine learning"])
+    jobs = [
+        _job("Junior Developer", "python ml entry level"),
+        _job("Senior Staff Engineer", "5+ years python required"),
+        _job("Graduate ML Engineer", "python ml for new grads"),
+    ]
+    kept = JobFilterAgent().run(jobs, profile, strict_experience=True)
+    titles = [j.title for j in kept]
+    assert "Senior Staff Engineer" not in titles
+    assert "Junior Developer" in titles
+    assert "Graduate ML Engineer" in titles
+
+
+def test_strict_experience_can_be_disabled():
+    profile = UserProfile(experience_level="Fresher", skills=["python"])
+    jobs = [_job("Senior Engineer", "python senior role")]
+    kept = JobFilterAgent().run(jobs, profile, strict_experience=False)
+    assert len(kept) == 1
