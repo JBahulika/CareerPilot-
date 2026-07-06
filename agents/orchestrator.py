@@ -20,6 +20,7 @@ from agents.matcher_agent import SemanticMatcherAgent
 from agents.pdf_agent import PDFGeneratorAgent
 from agents.resume_agent import ResumeTailorAgent
 from agents.scraper_agent import JobScraperAgent
+from core.config import settings
 from core.logging import get_logger
 from database.repositories import (
     finish_run,
@@ -98,7 +99,7 @@ def _match_node(state: PipelineState) -> PipelineState:
         matches = _matcher.run(
             state["profile"],
             state.get("filtered_jobs", []),
-            top_n=state.get("top_n", 5),
+            top_n=state.get("top_n", settings.top_n_jobs),
             strict_experience=state.get("strict_experience", True),
             allow_stretch=state.get("allow_stretch", False),
         )
@@ -168,7 +169,7 @@ _PIPELINE = _build_graph()
 def run_pipeline(
     run_id: int,
     profile: UserProfile,
-    top_n: int = 5,
+    top_n: int | None = None,
     source: Optional[str] = None,
     scrape_limit: int = 100,
     exclude_internships: bool = False,
@@ -180,7 +181,7 @@ def run_pipeline(
     initial: PipelineState = {
         "run_id": run_id,
         "profile": profile,
-        "top_n": top_n,
+        "top_n": top_n or settings.top_n_jobs,
         "source": source,
         "scrape_limit": scrape_limit,
         "exclude_internships": exclude_internships,
