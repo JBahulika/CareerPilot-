@@ -231,28 +231,72 @@ def _poll_run(run_id: int) -> None:
     st.warning("Timed out waiting for the pipeline.")
 
 
+def _format_posted_ago(iso_value: str | None) -> str:
+    if not iso_value:
+        return ""
+    try:
+        posted = datetime.fromisoformat(iso_value.replace("Z", "+00:00"))
+        if posted.tzinfo:
+            posted = posted.replace(tzinfo=None)
+        days = (datetime.utcnow() - posted).days
+        if days <= 0:
+            return "Posted today"
+        if days == 1:
+            return "Posted 1 day ago"
+        return f"Posted {days} days ago"
+    except ValueError:
+        return ""
+
+
 def page_results() -> None:
     st.header("Results")
     run_id = st.session_state.get("run_id")
     run_id = st.number_input("Run ID", 1, value=int(run_id) if run_id else 1)
 
-    if st.button("Load matches", type="primary") or run_id:
-        resp = api_get(f"/jobs/matches/{int(run_id)}", params={"top_n": 20})
-        if resp.status_code != 200:
-            st.error("Could not load matches.")
-            return
-        matches = resp.json().get("matches", [])
-        if not matches:
-            st.info("No matches for this run yet.")
-            return
-        for m in matches:
-            with st.container(border=True):
-                head = f"{m['title']} — {m['company']}  ·  Match {m['match_score']}%"
-                st.subheader(head)
-                st.caption(
-                    f"{m['recommendation']} · {m.get('experience') or 'Level N/A'} · "
-                    f"{m.get('location') or 'Location N/A'}"
-                )
+    page_size = st.selectbox("Jobs per page", [10, 15], index=0)
+    if "results_page" not in st.session_state:
+        st.session_state["results_page"] = 1
+
+    nav1, nav2, nav3 = st.columns([1, 2, 1])
+    if nav1.button("Previous", disabled=st.session_state["results_page"] <= 1):
+        st.session_state["results_page"] = max(1, st.session_state["results_page"] - 1)
+    if nav3.button("Next"):
+        st.session_state["results_page"] += 1
+
+    page = st.session_state["results_page"]
+    resp = api_get(
+        f"/jobs/matches/{int(run_id)}",
+        params={"page": page, "page_size": page_size},
+    )
+    if resp.status_code != 200:
+        st.error("Could not load matches.")
+        return
+
+    data = resp.json()
+    matches = data.get("matches", [])
+    total = data.get("total", 0)
+    total_pages = data.get("total_pages", 1)
+
+    if page > total_pages and total > 0:
+        st.session_state["results_page"] = total_pages
+        st.rerun()
+
+    nav2.caption(f"Page {page} of {total_pages} · {total} jobs total")
+
+    if not matches:
+        st.info("No matches for this run yet.")
+        return
+
+    for m in matches:
+        with st.container(border=True):
+            head = f"{m['title']} — {m['company']}  ·  Match {m['match_score']}%"
+            st.subheader(head)
+            posted_label = _format_posted_ago(m.get("posted_at"))
+            st.caption(
+                f"{m['recommendation']} · {m.get('experience') or 'Level N/A'} · "
+                f"{m.get('location') or 'Location N/A'}"
+                + (f" · {posted_label}" if posted_label else "")
+            )
                 cols = st.columns(2)
                 cols[0].write("**Matched:** " + ", ".join(m.get("matched_skills", [])))
                 cols[1].write("**Missing:** " + ", ".join(m.get("missing_skills", [])))
