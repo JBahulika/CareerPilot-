@@ -21,13 +21,20 @@ TIER_LABELS = {
     5: "Executive",
 }
 
-# How many tiers above the candidate's level are allowed (0 = exact band only).
+# How many tiers above/below the candidate's level are allowed by default.
 _ALLOWED_ABOVE: dict[int, int] = {
-    0: 1,  # fresher -> intern, entry, junior
-    1: 1,  # 0-2 yrs -> up to mid
-    2: 1,  # 2-4 yrs -> up to senior
-    3: 1,  # 4-7 yrs -> up to lead
-    4: 1,  # 7+ yrs -> up to executive
+    0: 2,
+    1: 2,
+    2: 2,
+    3: 2,
+    4: 2,
+}
+_ALLOWED_BELOW: dict[int, int] = {
+    0: 0,
+    1: 1,
+    2: 1,
+    3: 2,
+    4: 2,
 }
 
 _SENIOR_TITLE_PATTERNS = [
@@ -149,7 +156,11 @@ def _years_from_work_history(profile: UserProfile) -> int | None:
     return 4
 
 
-def infer_candidate_tier(profile: UserProfile) -> int:
+def infer_candidate_years(profile: UserProfile) -> float:
+    """Estimate candidate years of experience as a float."""
+    if profile.target_years_max is not None:
+        return float((profile.target_years_min or 0) + profile.target_years_max) / 2
+  # typo - fix
     """Return candidate seniority tier (0-5)."""
     from_level = _parse_years_from_level(profile.experience_level)
     from_history = _years_from_work_history(profile)
