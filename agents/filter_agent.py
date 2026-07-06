@@ -12,9 +12,6 @@ from models.schemas import JobListing, UserProfile
 from services.seniority import (
     candidate_tier_label,
     infer_candidate_tier,
-    infer_job_tier,
-    is_compatible,
-    job_seniority_label,
 )
 
 logger = get_logger(__name__)
@@ -30,6 +27,7 @@ class JobFilterAgent:
         exclude_internships: bool = False,
         strict_experience: bool = True,
         allow_stretch: bool = False,
+        flex_years: int | None = None,
     ) -> list[JobListing]:
         seen: set[str] = set()
         kept: list[JobListing] = []
@@ -46,7 +44,7 @@ class JobFilterAgent:
                 continue
 
             if strict_experience and not self._experience_level_ok(
-                job, candidate_tier, allow_stretch=allow_stretch
+                job, profile, allow_stretch=allow_stretch, flex_years=flex_years
             ):
                 continue
 
@@ -67,13 +65,23 @@ class JobFilterAgent:
     @staticmethod
     def _experience_level_ok(
         job: JobListing,
-        candidate_tier: int,
+        profile: UserProfile,
         *,
         allow_stretch: bool = False,
+        flex_years: int | None = None,
     ) -> bool:
-        job_tier = infer_job_tier(job)
-        if is_compatible(candidate_tier, job_tier, allow_stretch=allow_stretch):
+        from services.seniority import (
+            candidate_tier_label,
+            infer_candidate_tier,
+            is_job_compatible_with_profile,
+            job_seniority_label,
+        )
+
+        if is_job_compatible_with_profile(
+            job, profile, allow_stretch=allow_stretch, flex_years=flex_years
+        ):
             return True
+        candidate_tier = infer_candidate_tier(profile)
         logger.info(
             f"Filter: dropped '{job.title}' — level mismatch "
             f"(candidate: {candidate_tier_label(candidate_tier)}, "
