@@ -39,6 +39,7 @@ class JobRow(SQLModel, table=True):
     apply_url: str = ""
     skills_json: list = Field(default_factory=list, sa_column=Column(SA_JSON))
     content_hash: str = Field(default="", index=True, unique=True)
+    posted_at: Optional[datetime] = Field(default=None, index=True)
     scraped_at: datetime = Field(default_factory=datetime.utcnow)
 
 

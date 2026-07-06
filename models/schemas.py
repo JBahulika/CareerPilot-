@@ -88,6 +88,7 @@ class JobListing(BaseModel):
     salary: str = ""
     apply_url: str = ""
     content_hash: str = ""
+    posted_at: Optional[datetime] = None
     scraped_at: datetime = Field(default_factory=datetime.utcnow)
 
     def match_text(self) -> str:

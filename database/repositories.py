@@ -71,6 +71,7 @@ def upsert_jobs(jobs: list[JobListing]) -> list[int]:
                 apply_url=job.apply_url,
                 skills_json=job.skills,
                 content_hash=job.content_hash,
+                posted_at=job.posted_at or job.scraped_at,
                 scraped_at=job.scraped_at,
             )
             session.add(row)
@@ -99,6 +100,7 @@ def _row_to_job(row: JobRow) -> JobListing:
         salary=row.salary,
         apply_url=row.apply_url,
         content_hash=row.content_hash,
+        posted_at=row.posted_at or row.scraped_at,
         scraped_at=row.scraped_at,
     )
 
