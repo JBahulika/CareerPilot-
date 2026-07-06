@@ -87,9 +87,33 @@ Then in the dashboard:
 All settings live in `.env` (see [`.env.example`](.env.example)):
 
 - `OLLAMA_MODEL` — local model tag (default `qwen2.5:7b`).
-- `JOB_SOURCE` — `remotive` (default, no scraping) or `wellfound`.
+- `JOB_SOURCE` — `all` (default, aggregates every source below) or a single site id.
+- `EXPERIENCE_FLEX_YEARS` — +/- years around your target range when matching jobs.
 - `TOP_N_JOBS` — number of jobs to tailor resumes for.
 - `EMBEDDING_MODEL`, `CHROMA_PATH`, `DATABASE_URL`.
+
+### Job sources
+
+CareerPilot scrapes these popular job boards (API where available, Playwright otherwise):
+
+| Site | Method | Region |
+|------|--------|--------|
+| Remotive | API | Global |
+| RemoteOK | API | Global |
+| Arbeitnow | API | Global |
+| Jobicy | API | Global |
+| Himalayas | API | Global |
+| Wellfound (AngelList) | Scrape | Global |
+| Indeed | Scrape | Global |
+| Naukri | Scrape | India |
+| LinkedIn | Scrape | Global |
+| Glassdoor | Scrape | Global |
+
+Set `JOB_SOURCE=all` to query every source in one run, or pick a single id (e.g. `remotive`, `naukri`). Scraped sites may return fewer results when a board blocks automation.
+
+### Experience range
+
+On the **Profile** page, set a target years range (e.g. 0–2 for entry-level). The pipeline uses tier labels plus this range with configurable flexibility (`EXPERIENCE_FLEX_YEARS`, default ±2) so nearby roles are included without surfacing clearly senior jobs.
 
 ## Project layout
 
