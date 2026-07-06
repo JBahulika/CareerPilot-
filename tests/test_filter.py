@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from agents.filter_agent import JobFilterAgent
-from agents.scraper_agent import _content_hash
+from agents.job_sources.common import content_hash as _content_hash
 from models.schemas import JobListing, UserProfile
 
 
