@@ -156,11 +156,19 @@ def _years_from_work_history(profile: UserProfile) -> int | None:
     return 4
 
 
+def _tier_to_years(tier: int) -> float:
+    return {0: 0.0, 1: 1.0, 2: 3.0, 3: 5.0, 4: 8.0, 5: 12.0}.get(tier, 3.0)
+
+
 def infer_candidate_years(profile: UserProfile) -> float:
     """Estimate candidate years of experience as a float."""
-    if profile.target_years_max is not None:
-        return float((profile.target_years_min or 0) + profile.target_years_max) / 2
-  # typo - fix
+    if profile.target_years_min is not None and profile.target_years_max is not None:
+        return (profile.target_years_min + profile.target_years_max) / 2
+    tier = infer_candidate_tier(profile)
+    return _tier_to_years(tier)
+
+
+def infer_candidate_tier(profile: UserProfile) -> int:
     """Return candidate seniority tier (0-5)."""
     from_level = _parse_years_from_level(profile.experience_level)
     from_history = _years_from_work_history(profile)
@@ -172,6 +180,43 @@ def infer_candidate_years(profile: UserProfile) -> float:
     if from_history is not None:
         return from_history
     return 0
+
+
+def infer_job_required_years(job: JobListing) -> int | None:
+    """Extract minimum years of experience required from a job listing."""
+    haystack = f"{job.title} {job.description}"
+    max_years = 0
+    found = False
+    for pattern in (_YEARS_REQUIRED_RE, _YEARS_EXPERIENCE_RE):
+        for match in pattern.finditer(haystack):
+            max_years = max(max_years, int(match.group(1)))
+            found = True
+    if found:
+        return max_years
+    tier = infer_job_tier(job)
+    return int(_tier_to_years(tier))
+
+
+def is_years_compatible(
+    profile: UserProfile,
+    job: JobListing,
+    *,
+    flex_years: int = 2,
+    allow_stretch: bool = False,
+) -> bool:
+    """Flexible year-range check using profile target range or inferred years."""
+    job_years = infer_job_required_years(job)
+    if job_years is None:
+        return True
+
+    flex = flex_years + (1 if allow_stretch else 0)
+    if profile.target_years_min is not None and profile.target_years_max is not None:
+        min_y = max(0, profile.target_years_min - flex)
+        max_y = profile.target_years_max + flex
+        return min_y <= job_years <= max_y
+
+    candidate_years = infer_candidate_years(profile)
+    return job_years <= candidate_years + flex + 1 and job_years >= max(0, candidate_years - flex)
 
 
 def infer_job_tier_from_text(title: str, description: str = "") -> int:
