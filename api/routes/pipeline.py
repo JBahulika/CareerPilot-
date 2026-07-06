@@ -30,6 +30,8 @@ class RunRequest(BaseModel):
     strict_experience: bool = True
     allow_stretch: bool = False
     flex_years: Optional[int] = None
+    location: Optional[str] = None
+    include_remote: Optional[bool] = None
 
 
 @router.post("/run")
@@ -50,6 +52,8 @@ def start_pipeline(request: RunRequest, background_tasks: BackgroundTasks) -> di
         strict_experience=request.strict_experience,
         allow_stretch=request.allow_stretch,
         flex_years=request.flex_years,
+        location=request.location,
+        include_remote=request.include_remote,
     )
     return {"run_id": run_id, "status": "pending"}
 
