@@ -6,9 +6,7 @@ final score blends both signals: 60% embedding, 40% LLM. Jobs that exceed the
 candidate's experience band are excluded or heavily penalized.
 """
 
-from __future__ import annotations
-
-from agents.base import call_ollama_json
+from datetime import datetime, timedelta
 from core.logging import get_logger
 from models.schemas import (
     JobListing,
@@ -31,6 +29,19 @@ logger = get_logger(__name__)
 _EMBED_WEIGHT = 0.6
 _LLM_WEIGHT = 0.4
 _LEVEL_MISMATCH_CAP = 25
+_RECENCY_BONUS_HOURS = 48
+_RECENCY_BONUS_MAX = 5
+
+
+def _recency_bonus(job: JobListing) -> int:
+    """Small score boost for jobs posted within the last 48 hours."""
+    posted = job.posted_at or job.scraped_at
+    if posted is None:
+        return 0
+    age = datetime.utcnow() - posted
+    if age <= timedelta(hours=_RECENCY_BONUS_HOURS):
+        return _RECENCY_BONUS_MAX
+    return 0
 
 
 class SemanticMatcherAgent:
@@ -71,7 +82,12 @@ class SemanticMatcherAgent:
         )
 
         ranked = sorted(
-            eligible, key=lambda j: similarity.get(j.content_hash, 0.0), reverse=True
+            eligible,
+            key=lambda j: (
+                similarity.get(j.content_hash, 0.0),
+                (j.posted_at or j.scraped_at or datetime.min),
+            ),
+            reverse=True,
         )
         shortlist = ranked[: max(top_n * 2, top_n)]
 
@@ -87,7 +103,10 @@ class SemanticMatcherAgent:
             )
             results.append(match)
 
-        results.sort(key=lambda m: m.match_score, reverse=True)
+        results.sort(
+            key=lambda m: (m.match_score, m.job.posted_at or m.job.scraped_at or datetime.min),
+            reverse=True,
+        )
         return results[:top_n]
 
     def _score_job(
@@ -118,6 +137,7 @@ class SemanticMatcherAgent:
             recommendation = Recommendation.CONSIDER
 
         combined = round(_EMBED_WEIGHT * embed_score + _LLM_WEIGHT * llm_score)
+        combined += _recency_bonus(job)
         combined = max(0, min(100, combined))
 
         if not level_ok:
