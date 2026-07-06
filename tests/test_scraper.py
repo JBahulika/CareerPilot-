@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agents.scraper_agent import RemotiveSource, _content_hash, _strip_html
+from agents.job_sources.api_sources import RemotiveSource, _content_hash, _strip_html
 from models.schemas import UserProfile
 
 

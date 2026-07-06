@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from agents.scraper_agent import _parse_posted_at, _sort_and_filter_recent
+from agents.job_sources.common import sort_and_filter_recent as _sort_and_filter_recent
+from agents.job_sources.common import parse_posted_at as _parse_posted_at
 from models.schemas import JobListing
 
 

@@ -153,6 +153,7 @@ def get_matches_for_run(
                 {
                     "company": job_row.company,
                     "title": job_row.title,
+                    "source": job_row.source,
                     "location": job_row.location,
                     "experience": job_row.experience,
                     "apply_url": job_row.apply_url,

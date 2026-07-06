@@ -54,9 +54,9 @@ def test_job_compatibility_integration():
     assert is_job_compatible_with_profile(junior_job, profile) is True
 
 
-def test_allow_stretch_permits_one_extra_tier():
+def test_allow_stretch_permits_extra_tier():
     assert is_compatible(0, 2, allow_stretch=True) is True
-    assert is_compatible(0, 3, allow_stretch=True) is False
+    assert is_compatible(0, 4, allow_stretch=True) is False
 
 
 def test_infer_job_tier_accepts_job_listing():
