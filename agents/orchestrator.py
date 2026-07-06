@@ -39,6 +39,8 @@ class PipelineState(TypedDict, total=False):
     source: Optional[str]
     scrape_limit: int
     exclude_internships: bool
+    strict_experience: bool
+    allow_stretch: bool
     jobs: list[JobListing]
     filtered_jobs: list[JobListing]
     matches: list[MatchResult]
@@ -61,6 +63,7 @@ def _scrape_node(state: PipelineState) -> PipelineState:
             state["profile"],
             limit=state.get("scrape_limit", 100),
             source_name=state.get("source"),
+            allow_stretch=state.get("allow_stretch", False),
         )
         upsert_jobs(jobs)
         update_run(state["run_id"], jobs_scraped=len(jobs))
@@ -77,6 +80,8 @@ def _filter_node(state: PipelineState) -> PipelineState:
             state.get("jobs", []),
             state["profile"],
             exclude_internships=state.get("exclude_internships", False),
+            strict_experience=state.get("strict_experience", True),
+            allow_stretch=state.get("allow_stretch", False),
         )
         return {"filtered_jobs": filtered, "current_step": "filter"}
     except Exception as exc:  # noqa: BLE001
@@ -94,6 +99,8 @@ def _match_node(state: PipelineState) -> PipelineState:
             state["profile"],
             state.get("filtered_jobs", []),
             top_n=state.get("top_n", 5),
+            strict_experience=state.get("strict_experience", True),
+            allow_stretch=state.get("allow_stretch", False),
         )
         update_run(state["run_id"], jobs_matched=len(matches))
         return {"matches": matches, "current_step": "match"}
@@ -165,6 +172,8 @@ def run_pipeline(
     source: Optional[str] = None,
     scrape_limit: int = 100,
     exclude_internships: bool = False,
+    strict_experience: bool = True,
+    allow_stretch: bool = False,
 ) -> None:
     """Execute the full pipeline. Intended to run as a background task."""
     logger.info(f"Pipeline run {run_id} starting")
@@ -175,6 +184,8 @@ def run_pipeline(
         "source": source,
         "scrape_limit": scrape_limit,
         "exclude_internships": exclude_internships,
+        "strict_experience": strict_experience,
+        "allow_stretch": allow_stretch,
         "errors": [],
     }
     try:

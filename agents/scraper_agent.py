@@ -78,7 +78,13 @@ def _annotate_and_filter_jobs(
 class JobSource(Protocol):
     name: str
 
-    def fetch(self, profile: UserProfile, limit: int) -> list[JobListing]:
+    def fetch(
+        self,
+        profile: UserProfile,
+        limit: int,
+        *,
+        allow_stretch: bool = False,
+    ) -> list[JobListing]:
         ...
 
 
