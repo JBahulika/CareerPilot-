@@ -75,8 +75,8 @@ def test_include_remote_false_drops_remote_jobs():
         experience_level="3-5 years",
     )
     jobs = [
-        _job("Python Engineer", "python", location="Remote"),
-        _job("Python Engineer", "python", location="Bangalore"),
+        _job("Remote Python Engineer", "python", location="Remote"),
+        _job("Local Python Engineer", "python", location="Bangalore"),
     ]
     kept = JobFilterAgent().run(jobs, profile)
     assert len(kept) == 1
