@@ -28,8 +28,23 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-small-en-v1.5"
 
     # Pipeline
-    top_n_jobs: int = 5
+    top_n_jobs: int = 10
     job_source: str = "remotive"  # "remotive" | "wellfound"
+    display_page_size: int = 10
+    max_page_size: int = 15
+    recent_jobs_days: int = 7
+
+    # Daily scan
+    daily_scan_enabled: bool = True
+    daily_scan_hour: int = 8
+    daily_scan_minute: int = 0
+
+    # Notifications
+    notifier_backend: str = "local"  # "local" | "whatsapp"
+    whatsapp_enabled: bool = False
+    whatsapp_token: str = ""
+    whatsapp_phone_id: str = ""
+    whatsapp_recipient: str = ""
 
     # Storage
     database_url: str = "sqlite:///data/careerpilot.db"
@@ -53,6 +68,7 @@ class Settings(BaseSettings):
             self.jobs_dir,
             self.generated_resumes_dir,
             self.logs_dir,
+            self.logs_dir / "notifications",
             PROJECT_ROOT / "data",
             PROJECT_ROOT / self.chroma_path,
         ):
