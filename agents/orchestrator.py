@@ -42,6 +42,7 @@ class PipelineState(TypedDict, total=False):
     exclude_internships: bool
     strict_experience: bool
     allow_stretch: bool
+    flex_years: Optional[int]
     jobs: list[JobListing]
     filtered_jobs: list[JobListing]
     matches: list[MatchResult]
@@ -65,6 +66,7 @@ def _scrape_node(state: PipelineState) -> PipelineState:
             limit=state.get("scrape_limit", 100),
             source_name=state.get("source"),
             allow_stretch=state.get("allow_stretch", False),
+            flex_years=state.get("flex_years"),
         )
         upsert_jobs(jobs)
         update_run(state["run_id"], jobs_scraped=len(jobs))
