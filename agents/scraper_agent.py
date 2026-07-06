@@ -144,10 +144,12 @@ class RemotiveSource:
             return []
 
         jobs: list[JobListing] = []
+        now = datetime.utcnow()
         for item in raw_jobs[:limit]:
             description = _strip_html(item.get("description", ""))
             company = item.get("company_name", "")
             title = item.get("title", "")
+            posted = _parse_posted_at(item.get("publication_date")) or now
             jobs.append(
                 JobListing(
                     source=self.name,
@@ -159,9 +161,12 @@ class RemotiveSource:
                     salary=item.get("salary", "") or "",
                     apply_url=item.get("url", ""),
                     content_hash=_content_hash(company, title, description),
+                    posted_at=posted,
+                    scraped_at=now,
                 )
             )
         jobs = _annotate_and_filter_jobs(jobs, profile, allow_stretch=allow_stretch)
+        jobs = _sort_and_filter_recent(jobs)
         logger.info(f"Remotive: fetched {len(jobs)} jobs after level filter")
         return jobs
 
@@ -193,6 +198,7 @@ class WellfoundSource:
         logger.info(f"Wellfound: scraping {url} (limit {limit})")
 
         jobs: list[JobListing] = []
+        now = datetime.utcnow()
         try:
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=True)
@@ -220,6 +226,8 @@ class WellfoundSource:
                             location="",
                             apply_url=apply_url,
                             content_hash=_content_hash(company, title, text),
+                            posted_at=now,
+                            scraped_at=now,
                         )
                     )
                 browser.close()
@@ -228,6 +236,7 @@ class WellfoundSource:
             return []
 
         jobs = _annotate_and_filter_jobs(jobs, profile, allow_stretch=allow_stretch)
+        jobs = _sort_and_filter_recent(jobs)
         logger.info(f"Wellfound: fetched {len(jobs)} jobs after level filter")
         return jobs
 
@@ -262,6 +271,7 @@ class JobScraperAgent:
             )
 
         jobs = self._dedup(jobs)
+        jobs = _sort_and_filter_recent(jobs)
         self._snapshot(jobs, source_name)
         return jobs
 
