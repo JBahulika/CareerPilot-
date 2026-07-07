@@ -1,0 +1,9 @@
+#!/bin/sh
+# Strip Cursor attribution from commit messages (Co-authored-by / Made-with).
+# Installed from .githooks/prepare-commit-msg
+
+if [ -f "$1" ]; then
+  sed -i '' '/cursoragent@cursor\.com/d; /^Made-with: Cursor$/d' "$1"
+fi
+
+exit 0
