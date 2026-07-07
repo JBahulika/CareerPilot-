@@ -112,15 +112,31 @@ CareerPilot scrapes these popular job boards (API where available, Playwright ot
 
 Set `JOB_SOURCE=all` to query every source in one run, or pick a single id (e.g. `remotive`, `naukri`). Scraped sites may return fewer results when a board blocks automation.
 
-### Experience range
+### Experience matching
 
-On the **Profile** page, set a target years range (e.g. 0–2 for entry-level). The pipeline uses tier labels plus this range with configurable flexibility (`EXPERIENCE_FLEX_YEARS`, default ±2) so nearby roles are included without surfacing clearly senior jobs.
+On **Profile**, set experience level and target year range once. These drive all filtering:
+
+| Setting | What it does |
+|---------|----------------|
+| **Strict experience** | Blocks senior/lead roles for 0–1 year profiles (recommended) |
+| **Stretch roles** | Allows jobs one tier above you (e.g. mid-level when junior). Off by default |
+| **Year flexibility** | +/- years around your target range. Use 0–1 for tight matching |
+
+Senior roles were slipping through because compatibility used loose OR logic and wide defaults. This is now **tier AND years** with tighter bands.
 
 ### Location
 
-On the **Profile** page, set your **preferred location** (pre-filled from your resume). Remote jobs are included by default; uncheck **Include remote jobs** to restrict results to that city.
+Set **preferred location** on Profile (city-level, e.g. Bangalore). Remote jobs included by default. Run Pipeline can override location or recency for a single run.
 
-On **Run Pipeline**, you can override the location for a single run. Scrapers pass location into Indeed, Naukri, LinkedIn, and Glassdoor search URLs; API-based boards (Remotive, RemoteOK, etc.) are filtered after fetch. City aliases are supported (e.g. Bengaluru ↔ Bangalore).
+### Morning scan (9 AM)
+
+When the API is running, a daily scan at **9:00 AM** scrapes jobs from the **last 2 days**, runs the pipeline, generates tailored PDFs, and writes a digest to `logs/notifications/`. WhatsApp delivery uses the same digest when configured.
+
+```env
+DAILY_SCAN_HOUR=9
+DAILY_RECENT_JOBS_DAYS=2
+RECENT_JOBS_DAYS=3
+```
 
 ## Project layout
 
