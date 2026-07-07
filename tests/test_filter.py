@@ -84,7 +84,13 @@ def test_include_remote_false_drops_remote_jobs():
 
 
 def test_fresher_profile_rejects_senior_jobs():
-    profile = UserProfile(experience_level="Fresher", skills=["python", "machine learning"])
+    profile = UserProfile(
+        experience_level="0-1 years",
+        target_years_min=0,
+        target_years_max=1,
+        skills=["python", "machine learning"],
+        preferred_roles=["AI Engineer", "Machine Learning Engineer"],
+    )
     jobs = [
         _job("Junior Developer", "python ml entry level"),
         _job("Senior Staff Engineer", "5+ years python required"),

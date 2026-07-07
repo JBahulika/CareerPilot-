@@ -17,6 +17,11 @@ def test_fresher_candidate_tier():
     assert infer_candidate_tier(profile) == 0
 
 
+def test_zero_to_one_maps_to_fresher_tier():
+    profile = UserProfile(experience_level="0-1 years")
+    assert infer_candidate_tier(profile) == 0
+
+
 def test_senior_job_tier_from_title():
     assert infer_job_tier_from_text("Senior AI Engineer", "Python required") >= 3
 
@@ -54,11 +59,24 @@ def test_job_compatibility_integration():
     assert is_job_compatible_with_profile(junior_job, profile) is True
 
 
-def test_allow_stretch_permits_extra_tier():
+def test_allow_stretch_permits_one_extra_tier():
     assert is_compatible(0, 2, allow_stretch=True) is True
+    assert is_compatible(0, 3, allow_stretch=True) is False
     assert is_compatible(0, 4, allow_stretch=True) is False
 
 
-def test_infer_job_tier_accepts_job_listing():
+def test_zero_to_one_rejects_senior_jobs():
+    profile = UserProfile(
+        experience_level="0-1 years",
+        target_years_min=0,
+        target_years_max=1,
+        skills=["python", "machine learning"],
+        preferred_roles=["AI Engineer"],
+    )
+    senior_job = JobListing(
+        title="Senior AI Engineer",
+        description="5+ years Python experience required",
+    )
+    assert is_job_compatible_with_profile(senior_job, profile) is False
     job = JobListing(title="Lead Backend Engineer", description="")
     assert infer_job_tier(job) >= 4
