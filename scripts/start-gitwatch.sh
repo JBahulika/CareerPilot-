@@ -23,11 +23,13 @@ ROOT="$(pwd)"
 MSG_SCRIPT="$ROOT/scripts/gitwatch-commit-msg.sh"
 chmod +x "$MSG_SCRIPT" "$ROOT/.githooks/prepare-commit-msg" 2>/dev/null || true
 
-PUSH_REMOTE=""
 if [ "$1" = "--push" ]; then
-  PUSH_REMOTE="-r origin"
   echo "gitwatch: will push to origin after each commit"
 fi
 
 echo "Watching $ROOT (Ctrl+C to stop)"
-exec gitwatch -c "$MSG_SCRIPT" -C $PUSH_REMOTE "$ROOT"
+if [ -n "$PUSH_REMOTE" ]; then
+  exec gitwatch -r origin -c "$MSG_SCRIPT" -C "$ROOT"
+else
+  exec gitwatch -c "$MSG_SCRIPT" -C "$ROOT"
+fi
