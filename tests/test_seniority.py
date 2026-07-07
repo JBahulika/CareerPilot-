@@ -78,5 +78,8 @@ def test_zero_to_one_rejects_senior_jobs():
         description="5+ years Python experience required",
     )
     assert is_job_compatible_with_profile(senior_job, profile) is False
+
+
+def test_infer_job_tier_accepts_job_listing():
     job = JobListing(title="Lead Backend Engineer", description="")
     assert infer_job_tier(job) >= 4
