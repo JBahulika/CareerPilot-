@@ -1,18 +1,65 @@
+# CareerPilot AI — Python dependencies
+# Install: pip install -r requirements.txt
+#
+# Python: 3.10, 3.11, or 3.12 (64-bit). Requires Python >=3.10.
+#
+# ── System prerequisites (install separately, not via pip) ─────────────────
+#   Ollama (local LLM):  https://ollama.com
+#     ollama pull qwen2.5:7b
+#   Playwright Chromium (scraped job boards: Indeed, Naukri, LinkedIn, etc.):
+#     playwright install chromium
+#
+# ── Windows setup ──────────────────────────────────────────────────────────
+#   python -m venv .venv
+#   .venv\Scripts\activate
+#   python -m pip install --upgrade pip
+#   pip install -r requirements.txt
+#   playwright install chromium
+#   copy .env.example .env
+#
+#   Terminal 1:  uvicorn main:app --reload
+#   Terminal 2:  streamlit run ui/streamlit_app.py
+#
+# ── macOS / Linux setup ────────────────────────────────────────────────────
+#   python3 -m venv .venv
+#   source .venv/bin/activate
+#   pip install -r requirements.txt
+#   playwright install chromium
+#   cp .env.example .env
+#
+# Note: sentence-transformers pulls PyTorch automatically (CPU build on Windows).
+#       First install may take several minutes and download ~1–2 GB of models.
+
+# --- Web API & dashboard ---
 fastapi>=0.115.0
-uvicorn[standard]>=0.30.0
+uvicorn>=0.30.0
+watchfiles>=0.13.0
+websockets>=10.4
+httptools>=0.6.0; platform_system != "Windows"
+uvloop>=0.19.0; platform_system != "Windows"
+python-multipart>=0.0.9
 streamlit>=1.32.0
 httpx>=0.27.0
+
+# --- AI agents & embeddings ---
 langgraph>=0.2.0
 ollama>=0.4.0
-chromadb>=0.5.0
 sentence-transformers>=2.7.0
+chromadb>=0.5.0
+
+# --- Database & configuration ---
 sqlmodel>=0.0.22
+pydantic>=2.0.0
 pydantic-settings>=2.0.0
+
+# --- Resume PDF & job scraping ---
 pymupdf>=1.24.0
 playwright>=1.44.0
-beautifulsoup4>=4.12.0
 requests>=2.31.0
+
+# --- Scheduler & logging ---
 apscheduler>=3.10.0
 loguru>=0.7.0
-python-multipart>=0.0.9
+
+# --- Tests ---
 pytest>=8.0.0
