@@ -252,16 +252,31 @@ def is_relevant_job_posting(job: JobListing, profile: UserProfile) -> bool:
     if not _profile_is_aiml_focused(profile):
         return role_relevant(job, profile)
 
-    # --- AIML profile: require clear technical AIML signals ---
+    # --- AIML profile: title must signal AIML/ML, not just generic "engineer" ---
+    title = (job.title or "").lower()
+    haystack = f"{job.title} {job.description} {' '.join(job.skills)}".lower()
+
+    _NON_AIML_ENGINEERING = [
+        r"\bfrontend\b",
+        r"\bquality\s+engineer\b",
+        r"\bqa\s+engineer\b",
+        r"\bfull[\s-]?stack\b",
+        r"\brails\b",
+        r"\bdevops\b",
+        r"\bsre\b",
+        r"\bproduct\s+engineer\b",
+    ]
     title_aiml_hits = _aiml_hits(job.title)
-    full_aiml_hits = _aiml_hits(haystack)
+    if title_aiml_hits == 0 and any(re.search(p, title) for p in _NON_AIML_ENGINEERING):
+        return False
+
     has_tech_title = any(_word_boundary_hit(w, title) for w in _TECH_TITLE_WORDS)
 
-    # Strong pass: AIML signal in title + technical role title
+    # Strong pass: AIML in title + technical role
     if title_aiml_hits >= 1 and has_tech_title:
         return True
 
-    # Preferred role phrase appears in title (e.g. "Machine Learning Engineer")
+    # Preferred role phrase in title
     for role in role_search_terms(profile):
         role_lower = role.lower()
         if len(role_lower) > 5 and role_lower in title:
@@ -270,13 +285,9 @@ def is_relevant_job_posting(job: JobListing, profile: UserProfile) -> bool:
         if len(role_tokens) >= 2 and all(_word_boundary_hit(t, title) for t in role_tokens[:3]):
             return True
 
-    # Title has tech role + multiple AIML terms in full text
-    if has_tech_title and full_aiml_hits >= 2:
-        return True
-
-    # At least 2 profile skills hit + AIML term somewhere
-    if skill_hits_in_text(profile, haystack) >= 2 and full_aiml_hits >= 1 and has_tech_title:
-        return True
+    # Junior/graduate ML titles without explicit "AI" still OK if ML in title
+    if _word_boundary_hit("ml", title) or "machine learning" in title:
+        return has_tech_title
 
     return False
 

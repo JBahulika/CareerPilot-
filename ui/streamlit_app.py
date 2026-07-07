@@ -324,9 +324,9 @@ Settings come from your **Profile** (experience, location, strict/stretch rules)
         recent_days = st.slider(
             "Only jobs posted in last N days",
             1,
-            14,
-            3,
-            help="Lower = fresher listings. Morning scan uses 2 days.",
+            30,
+            7,
+            help="7 days recommended. Very low values (1-3) often return zero AIML jobs.",
         )
 
     if st.button("Run pipeline", type="primary"):
