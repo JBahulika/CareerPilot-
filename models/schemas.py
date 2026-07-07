@@ -52,6 +52,11 @@ class UserProfile(BaseModel):
     include_remote: bool = True
     target_years_min: Optional[int] = None
     target_years_max: Optional[int] = None
+    # Pipeline preferences (saved on Profile, used by Run Pipeline defaults)
+    strict_experience: bool = True
+    allow_stretch: bool = False
+    flex_years: Optional[int] = None
+    exclude_internships: bool = False
 
     def experience_tier(self) -> int:
         """Numeric seniority tier (0=intern/fresher .. 5=executive)."""

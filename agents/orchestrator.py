@@ -53,6 +53,7 @@ class PipelineState(TypedDict, total=False):
     strict_experience: bool
     allow_stretch: bool
     flex_years: Optional[int]
+    recent_days: Optional[int]
     location: Optional[str]
     include_remote: Optional[bool]
     jobs: list[JobListing]

@@ -32,13 +32,14 @@ class Settings(BaseSettings):
     job_source: str = "all"  # "all" | remotive | wellfound | indeed | ...
     display_page_size: int = 10
     max_page_size: int = 15
-    recent_jobs_days: int = 7
-    experience_flex_years: int = 2
+    recent_jobs_days: int = 3
+    experience_flex_years: int = 1
+    daily_recent_jobs_days: int = 2
     default_include_remote: bool = True
 
-    # Daily scan
+    # Daily scan (9 AM — fresh jobs + tailored resumes for WhatsApp digest)
     daily_scan_enabled: bool = True
-    daily_scan_hour: int = 8
+    daily_scan_hour: int = 9
     daily_scan_minute: int = 0
 
     # Notifications
