@@ -4,6 +4,14 @@
 
 if [ -f "$1" ]; then
   sed -i '' '/cursoragent@cursor\.com/d; /^Made-with: Cursor$/d' "$1"
+
+  # gitwatch uses -m "Update"; list staged files in the message
+  if [ "$2" = "message" ] && grep -qx "Update" "$1" 2>/dev/null; then
+    files=$(git diff --cached --name-only | head -3 | awk '{printf sep $0; sep=", "} END{print ""}')
+    if [ -n "$files" ]; then
+      printf 'Update %s\n' "$files" > "$1"
+    fi
+  fi
 fi
 
 exit 0

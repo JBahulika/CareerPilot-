@@ -20,8 +20,7 @@ fi
 git config core.hooksPath .githooks
 
 ROOT="$(pwd)"
-MSG_SCRIPT="$ROOT/scripts/gitwatch-commit-msg.sh"
-chmod +x "$MSG_SCRIPT" "$ROOT/.githooks/prepare-commit-msg" 2>/dev/null || true
+chmod +x "$ROOT/.githooks/prepare-commit-msg" 2>/dev/null || true
 
 if [ "$1" = "--push" ]; then
   echo "gitwatch: will push to origin after each commit"
@@ -29,7 +28,7 @@ fi
 
 echo "Watching $ROOT (Ctrl+C to stop)"
 if [ "$1" = "--push" ]; then
-  exec gitwatch -f -r origin -c "$MSG_SCRIPT" .
+  exec gitwatch -f -r origin -m "Update" .
 else
-  exec gitwatch -f -c "$MSG_SCRIPT" .
+  exec gitwatch -f -m "Update" .
 fi
