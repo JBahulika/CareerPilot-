@@ -93,6 +93,11 @@ def skill_hits_in_text(profile: UserProfile, text: str) -> int:
     return hits
 
 
+_TECH_ROLE_WORDS = frozenset(
+    {"engineer", "developer", "analyst", "scientist", "architect", "programmer"}
+)
+
+
 def role_relevant(job: JobListing, profile: UserProfile) -> bool:
     """Job title/description should align with target roles or core skills."""
     haystack = f"{job.title} {job.description} {' '.join(job.skills)}".lower()
@@ -107,7 +112,12 @@ def role_relevant(job: JobListing, profile: UserProfile) -> bool:
     if role_hit:
         return True
 
-    # Fallback: at least two distinct profile skills must appear in the job text.
+    profile_role_text = " ".join(roles).lower()
+    if any(w in haystack for w in _TECH_ROLE_WORDS) and any(
+        w in profile_role_text for w in _TECH_ROLE_WORDS
+    ):
+        return True
+
     return skill_hits_in_text(profile, haystack) >= 2
 
 
