@@ -161,11 +161,12 @@ pytest
 
 ## Autonomous daily scan
 
-When `DAILY_SCAN_ENABLED=true` (default), the API starts a morning cron job that:
+When `DAILY_SCAN_ENABLED=true` (default), the API runs a **9 AM** cron job that:
 
-1. Runs the **full pipeline** for your latest profile (top 10 jobs with tailored PDFs)
-2. Prioritizes jobs posted in the last 7 days (`RECENT_JOBS_DAYS`)
-3. Writes a digest to `logs/notifications/` (or sends WhatsApp when configured)
+1. Scrapes jobs posted in the last **2 days** (`DAILY_RECENT_JOBS_DAYS`)
+2. Runs the full pipeline using your saved Profile preferences
+3. Generates tailored PDFs for top matches
+4. Sends a digest to `logs/notifications/` or **WhatsApp** when configured
 
 Check status: `GET /scheduler/status` or the **Setup** page in Streamlit.
 
