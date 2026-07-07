@@ -27,6 +27,7 @@ class JobScraperAgent:
         source_name: str | None = None,
         allow_stretch: bool = False,
         flex_years: int | None = None,
+        recent_days: int | None = None,
     ) -> list[JobListing]:
         source_name = source_name or settings.job_source
         flex = flex_years if flex_years is not None else settings.experience_flex_years
@@ -47,7 +48,8 @@ class JobScraperAgent:
             )
 
         jobs = self._dedup(jobs)
-        jobs = sort_and_filter_recent(jobs)
+        days = recent_days if recent_days is not None else settings.recent_jobs_days
+        jobs = sort_and_filter_recent(jobs, recent_days=days)
         self._snapshot(jobs, source_name)
         return jobs
 
