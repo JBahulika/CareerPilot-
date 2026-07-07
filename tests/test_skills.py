@@ -57,6 +57,9 @@ def test_aiml_profile_blocks_unrelated_manager_roles():
     profile = _aiml_profile()
     job = _job("Proposal Manager", "project management and proposals", skills=[])
     assert not role_relevant(job, profile)
+
+
+def test_filter_matched_skills_rejects_hallucinated_abap():
     profile = _aiml_profile()
     claimed = ["Python", "ABAP", "PyTorch"]
     filtered = filter_matched_skills(profile, claimed)
