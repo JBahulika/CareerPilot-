@@ -7,11 +7,10 @@ from datetime import datetime
 import requests
 
 from agents.job_sources.common import (
-    annotate_and_filter_jobs,
     build_job,
     parse_posted_at,
+    prepare_scraped_jobs,
     search_terms,
-    sort_and_filter_recent,
     strip_html,
 )
 from core.logging import get_logger

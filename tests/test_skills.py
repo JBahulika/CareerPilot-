@@ -53,7 +53,10 @@ def test_aiml_job_relevant_for_aiml_profile():
     assert not has_unrelated_enterprise_stack(job, profile)
 
 
-def test_filter_matched_skills_rejects_hallucinated_abap():
+def test_aiml_profile_blocks_unrelated_manager_roles():
+    profile = _aiml_profile()
+    job = _job("Proposal Manager", "project management and proposals", skills=[])
+    assert not role_relevant(job, profile)
     profile = _aiml_profile()
     claimed = ["Python", "ABAP", "PyTorch"]
     filtered = filter_matched_skills(profile, claimed)

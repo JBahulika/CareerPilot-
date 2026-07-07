@@ -370,11 +370,17 @@ def _poll_run(run_id: int) -> None:
         if run["status"] in ("completed", "failed"):
             progress.progress(1.0)
             if run["status"] == "completed":
-                st.success("Pipeline complete. See the Results page.")
+                if run.get("jobs_matched", 0) == 0:
+                    st.warning(
+                        "Pipeline finished but found **no matching jobs**. "
+                        "See the message below and try another source or wider settings."
+                    )
+                else:
+                    st.success("Pipeline complete. See the Results page.")
             else:
                 st.error("Pipeline failed.")
             if run.get("errors"):
-                st.warning("\n".join(run["errors"]))
+                st.info("\n".join(run["errors"]))
             return
         time.sleep(1.0)
     st.warning("Timed out waiting for the pipeline.")
