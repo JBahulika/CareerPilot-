@@ -9,11 +9,14 @@ from __future__ import annotations
 
 from core.logging import get_logger
 from models.schemas import JobListing, UserProfile
+from services.location import effective_location, location_filter_ok
 from services.seniority import (
     candidate_tier_label,
     infer_candidate_tier,
+    is_job_compatible_with_profile,
+    job_seniority_label,
 )
-from services.location import effective_location, location_filter_ok
+from services.skills import has_unrelated_enterprise_stack, role_relevant
 
 logger = get_logger(__name__)
 
@@ -34,8 +37,6 @@ class JobFilterAgent:
         kept: list[JobListing] = []
         candidate_tier = infer_candidate_tier(profile)
 
-        profile_terms = self._profile_terms(profile)
-
         for job in jobs:
             if job.content_hash in seen:
                 continue
@@ -49,7 +50,12 @@ class JobFilterAgent:
             ):
                 continue
 
-            if profile_terms and not self._is_relevant(job, profile_terms):
+            if has_unrelated_enterprise_stack(job, profile):
+                logger.info(f"Filter: dropped '{job.title}' — unrelated enterprise stack")
+                continue
+
+            if not role_relevant(job, profile):
+                logger.info(f"Filter: dropped '{job.title}' — role/skill mismatch")
                 continue
 
             if not self._location_ok(job, profile):
@@ -71,13 +77,6 @@ class JobFilterAgent:
         allow_stretch: bool = False,
         flex_years: int | None = None,
     ) -> bool:
-        from services.seniority import (
-            candidate_tier_label,
-            infer_candidate_tier,
-            is_job_compatible_with_profile,
-            job_seniority_label,
-        )
-
         if is_job_compatible_with_profile(
             job, profile, allow_stretch=allow_stretch, flex_years=flex_years
         ):
@@ -91,23 +90,9 @@ class JobFilterAgent:
         return False
 
     @staticmethod
-    def _profile_terms(profile: UserProfile) -> set[str]:
-        terms = set()
-        for value in (*profile.skills, *profile.preferred_roles, profile.role):
-            for word in value.lower().split():
-                if len(word) > 2:
-                    terms.add(word)
-        return terms
-
-    @staticmethod
     def _is_internship(job: JobListing) -> bool:
         haystack = f"{job.title} {job.description[:200]}".lower()
         return any(term in haystack for term in _INTERNSHIP_TERMS)
-
-    @staticmethod
-    def _is_relevant(job: JobListing, profile_terms: set[str]) -> bool:
-        haystack = f"{job.title} {' '.join(job.skills)} {job.description}".lower()
-        return any(term in haystack for term in profile_terms)
 
     @staticmethod
     def _location_ok(job: JobListing, profile: UserProfile) -> bool:
