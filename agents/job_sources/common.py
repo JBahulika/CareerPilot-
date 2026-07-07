@@ -8,7 +8,10 @@ from datetime import datetime, timedelta
 
 from core.config import settings
 from models.schemas import JobListing, UserProfile
-from agents.job_sources.common import infer_candidate_tier
+from services.seniority import (
+    experience_label_for_job,
+    is_job_compatible_with_profile,
+)
 from services.location import effective_location, location_filter_ok
 
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
