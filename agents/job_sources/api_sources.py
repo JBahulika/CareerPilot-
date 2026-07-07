@@ -214,9 +214,6 @@ class HimalayasSource:
 
 
 def _finalize(jobs, profile, allow_stretch, flex_years, source_name) -> list[JobListing]:
-    jobs = annotate_and_filter_jobs(
-        jobs, profile, allow_stretch=allow_stretch, flex_years=flex_years
-    )
-    jobs = sort_and_filter_recent(jobs)
-    logger.info(f"{source_name}: {len(jobs)} jobs after filters")
+    jobs = prepare_scraped_jobs(jobs)
+    logger.info(f"{source_name}: {len(jobs)} jobs after recency filter")
     return jobs

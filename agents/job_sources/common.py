@@ -104,21 +104,34 @@ def annotate_and_filter_jobs(
     *,
     allow_stretch: bool = False,
     flex_years: int | None = None,
+    apply_experience: bool = True,
+    apply_location: bool = True,
 ) -> list[JobListing]:
     kept: list[JobListing] = []
     pref = search_location(profile)
     for job in jobs:
         job.experience = experience_label_for_job(job)
-        if not is_job_compatible_with_profile(
+        if apply_experience and not is_job_compatible_with_profile(
             job, profile, allow_stretch=allow_stretch, flex_years=flex_years
         ):
             continue
-        if not location_filter_ok(
+        if apply_location and not location_filter_ok(
             job, pref, include_remote=profile.include_remote
         ):
             continue
         kept.append(job)
     return kept
+
+
+def prepare_scraped_jobs(jobs: list[JobListing]) -> list[JobListing]:
+    """Light post-process at scrape time: label seniority + recency only.
+
+    Experience, role, and location gating happen in the filter agent so we
+    do not over-prune before the pipeline sees listings.
+    """
+    for job in jobs:
+        job.experience = experience_label_for_job(job)
+    return sort_and_filter_recent(jobs)
 
 
 def build_job(
