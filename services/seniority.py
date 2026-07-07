@@ -117,13 +117,15 @@ def _parse_years_from_level(level: str) -> int | None:
     range_match = _EXPERIENCE_LEVEL_RE.search(lowered)
     if range_match:
         low = int(range_match.group(1))
-        if low <= 1:
+        high = int(range_match.group(2))
+        midpoint = (low + high) / 2
+        if midpoint <= 1:
             return 0
-        if low <= 3:
+        if midpoint <= 2.5:
             return 1
-        if low <= 5:
+        if midpoint <= 5:
             return 2
-        if low <= 7:
+        if midpoint <= 7:
             return 3
         return 4
 
