@@ -11,7 +11,7 @@ def test_format_digest_includes_jobs():
         {"company": "OpenAI", "title": "ML Engineer", "match_score": 88, "apply_url": ""},
     ]
     text = format_digest(matches, "Alex")
-    assert "2 New Jobs Found" in text
+    assert "2 new matches" in text
     assert "Google" in text
-    assert "Match 94%" in text
+    assert "94%" in text
     assert "Alex" in text

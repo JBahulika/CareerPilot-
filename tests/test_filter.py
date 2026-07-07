@@ -7,8 +7,19 @@ from agents.job_sources.common import content_hash as _content_hash
 from models.schemas import JobListing, UserProfile
 
 
+def _mid_profile(**kwargs) -> UserProfile:
+    base = dict(
+        skills=["python"],
+        experience_level="3-5 years",
+        target_years_min=3,
+        target_years_max=5,
+        preferred_roles=["AI Engineer"],
+    )
+    base.update(kwargs)
+    return UserProfile(**base)
+
+
 def _job(title: str, desc: str = "", location: str = "Remote", skills=None) -> JobListing:
-    return JobListing(
         title=title,
         company="Acme",
         description=desc,
