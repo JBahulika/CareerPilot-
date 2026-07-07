@@ -28,7 +28,7 @@ if [ "$1" = "--push" ]; then
 fi
 
 echo "Watching $ROOT (Ctrl+C to stop)"
-if [ -n "$PUSH_REMOTE" ]; then
+if [ "$1" = "--push" ]; then
   exec gitwatch -r origin -c "$MSG_SCRIPT" -C "$ROOT"
 else
   exec gitwatch -c "$MSG_SCRIPT" -C "$ROOT"
