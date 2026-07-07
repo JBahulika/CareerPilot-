@@ -81,6 +81,7 @@ def _scrape_node(state: PipelineState) -> PipelineState:
             source_name=state.get("source"),
             allow_stretch=state.get("allow_stretch", False),
             flex_years=state.get("flex_years"),
+            recent_days=state.get("recent_days"),
         )
         upsert_jobs(jobs)
         update_run(state["run_id"], jobs_scraped=len(jobs))
@@ -198,6 +199,7 @@ def run_pipeline(
     flex_years: Optional[int] = None,
     location: Optional[str] = None,
     include_remote: Optional[bool] = None,
+    recent_days: Optional[int] = None,
 ) -> None:
     """Execute the full pipeline. Intended to run as a background task."""
     logger.info(f"Pipeline run {run_id} starting")
@@ -211,6 +213,7 @@ def run_pipeline(
         "strict_experience": strict_experience,
         "allow_stretch": allow_stretch,
         "flex_years": flex_years,
+        "recent_days": recent_days,
         "location": location,
         "include_remote": include_remote,
         "errors": [],
