@@ -29,7 +29,7 @@ fi
 
 echo "Watching $ROOT (Ctrl+C to stop)"
 if [ "$1" = "--push" ]; then
-  exec gitwatch -r origin -c "$MSG_SCRIPT" -C "$ROOT"
+  exec gitwatch -f -r origin -c "$MSG_SCRIPT" .
 else
-  exec gitwatch -c "$MSG_SCRIPT" -C "$ROOT"
+  exec gitwatch -f -c "$MSG_SCRIPT" .
 fi
