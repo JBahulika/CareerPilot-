@@ -153,6 +153,19 @@ tests/        # unit + fixture-based tests
 main.py       # FastAPI entry point
 ```
 
+## Git auto-commit (gitwatch)
+
+Optional: auto-commit on save while developing.
+
+```bash
+brew install gitwatch          # once
+./scripts/setup-git-hooks.sh # strips Cursor co-author from commits
+./scripts/start-gitwatch.sh  # watch + commit locally
+./scripts/start-gitwatch.sh --push  # commit + push to origin
+```
+
+Commit messages list changed files (via `scripts/gitwatch-commit-msg.sh`).
+
 ## Tests
 
 ```bash
@@ -172,7 +185,7 @@ Check status: `GET /scheduler/status` or the **Setup** page in Streamlit.
 
 ```env
 DAILY_SCAN_ENABLED=true
-DAILY_SCAN_HOUR=8
+DAILY_SCAN_HOUR=9
 DAILY_SCAN_MINUTE=0
 NOTIFIER_BACKEND=local   # switch to whatsapp when ready
 ```
