@@ -8,7 +8,8 @@ from models.schemas import JobListing, UserProfile
 from services.skills import (
     filter_matched_skills,
     has_unrelated_enterprise_stack,
-    role_relevant,
+    is_excluded_job_title,
+    is_relevant_job_posting,
 )
 
 
@@ -49,14 +50,22 @@ def test_abap_job_blocked_for_aiml_profile():
 def test_aiml_job_relevant_for_aiml_profile():
     profile = _aiml_profile()
     job = _job("Junior ML Engineer", "Python pytorch machine learning", skills=["Python"])
-    assert role_relevant(job, profile)
+    assert is_relevant_job_posting(job, profile)
     assert not has_unrelated_enterprise_stack(job, profile)
 
 
 def test_aiml_profile_blocks_unrelated_manager_roles():
     profile = _aiml_profile()
+    assert is_excluded_job_title("Proposal Manager")
+    assert is_excluded_job_title("Junior Risk Manager")
     job = _job("Proposal Manager", "project management and proposals", skills=[])
-    assert not role_relevant(job, profile)
+    assert not is_relevant_job_posting(job, profile)
+    job2 = _job(
+        "Binance Accelerator Program - Lifecycle Operations",
+        "marketing operations CRM",
+        skills=[],
+    )
+    assert not is_relevant_job_posting(job2, profile)
 
 
 def test_filter_matched_skills_rejects_hallucinated_abap():

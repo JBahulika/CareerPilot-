@@ -73,14 +73,19 @@ class SemanticMatcherAgent:
             job
             for job in jobs
             if is_relevant_job_posting(job, profile)
-            and is_job_compatible_with_profile(
-                job,
-                profile,
-                allow_stretch=allow_stretch,
-                flex_years=flex_years,
-            )
             and not has_unrelated_enterprise_stack(job, profile)
         ]
+        if strict_experience:
+            eligible = [
+                job
+                for job in eligible
+                if is_job_compatible_with_profile(
+                    job,
+                    profile,
+                    allow_stretch=allow_stretch,
+                    flex_years=flex_years,
+                )
+            ]
         logger.info(
             f"Matcher: {len(jobs)} -> {len(eligible)} jobs after relevance + seniority pre-filter"
         )
