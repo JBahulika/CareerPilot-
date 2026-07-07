@@ -217,7 +217,7 @@ def infer_candidate_tier(profile: UserProfile) -> int:
 
 
 def infer_job_required_years(job: JobListing) -> int | None:
-    """Extract minimum years of experience required from a job listing."""
+    """Extract minimum years of experience required from explicit job text only."""
     haystack = f"{job.title} {job.description}"
     max_years = 0
     found = False
@@ -227,8 +227,7 @@ def infer_job_required_years(job: JobListing) -> int | None:
             found = True
     if found:
         return max_years
-    tier = infer_job_tier(job)
-    return int(_tier_to_years(tier))
+    return None
 
 
 def is_years_compatible(
