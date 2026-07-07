@@ -9,13 +9,13 @@ from __future__ import annotations
 
 from core.logging import get_logger
 from models.schemas import JobListing, UserProfile
-from services.location import effective_location, location_filter_ok
 from services.seniority import (
     candidate_tier_label,
     infer_candidate_tier,
     is_job_compatible_with_profile,
     job_seniority_label,
 )
+from services.location import effective_location, location_filter_ok
 from services.skills import has_unrelated_enterprise_stack, role_relevant
 
 logger = get_logger(__name__)
@@ -51,7 +51,7 @@ class JobFilterAgent:
                 continue
 
             if has_unrelated_enterprise_stack(job, profile):
-                logger.info(f"Filter: dropped '{job.title}' — unrelated enterprise stack")
+                logger.info(f"Filter: dropped '{job.title}' — unrelated tech stack")
                 continue
 
             if not role_relevant(job, profile):
