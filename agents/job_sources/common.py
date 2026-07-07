@@ -49,27 +49,49 @@ def parse_posted_at(value: str | None) -> datetime | None:
 
 
 def search_terms(profile: UserProfile) -> str:
-    terms = profile.preferred_roles or [profile.role]
-    base = " ".join(t for t in terms if t).strip() or "software engineer"
+    from services.skills import role_search_terms
+
+    roles = role_search_terms(profile)
+    base = " ".join(roles)
+    skill_blob = " ".join(profile.skills).lower()
+    aiml_boost: list[str] = []
+    if any(
+        k in skill_blob
+        for k in (
+            "pytorch",
+            "tensorflow",
+            "langchain",
+            "langgraph",
+            "llm",
+            "machine learning",
+            "deep learning",
+            "nlp",
+            "computer vision",
+        )
+    ):
+        aiml_boost = ["AI engineer", "machine learning engineer", "ML engineer"]
     tier = infer_candidate_tier(profile)
+    parts = [base, *aiml_boost]
     if tier <= 1:
-        return f"{base} junior entry level graduate"
-    if tier == 2:
-        return f"{base} mid level"
-    return base
+        parts.append("junior entry level graduate")
+    elif tier == 2:
+        parts.append("mid level")
+    return " ".join(dict.fromkeys(p for p in parts if p))
 
 
 def search_location(profile: UserProfile) -> str:
     return effective_location(profile)
 
 
-def sort_and_filter_recent(jobs: list[JobListing]) -> list[JobListing]:
+def sort_and_filter_recent(
+    jobs: list[JobListing], *, recent_days: int | None = None
+) -> list[JobListing]:
     now = datetime.utcnow()
     for job in jobs:
         if job.posted_at is None:
             job.posted_at = job.scraped_at or now
     jobs.sort(key=lambda j: j.posted_at or now, reverse=True)
-    days = settings.recent_jobs_days
+    days = recent_days if recent_days is not None else settings.recent_jobs_days
     if days and days > 0:
         cutoff = now - timedelta(days=days)
         jobs = [j for j in jobs if (j.posted_at or now) >= cutoff]

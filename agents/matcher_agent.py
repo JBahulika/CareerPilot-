@@ -2,8 +2,8 @@
 
 Combines embedding similarity (ChromaDB) with LLM reasoning to produce an
 explainable match score, matched/missing skills, and a recommendation. The
-final score blends both signals: 60% embedding, 40% LLM. Jobs that exceed the
-candidate's experience band are excluded or heavily penalized.
+final score blends embedding, deterministic skill overlap, and LLM signals.
+Jobs outside the candidate's experience band are excluded when strict mode is on.
 """
 
 from __future__ import annotations
@@ -21,19 +21,23 @@ from models.schemas import (
 from prompts.templates import MATCHER_SYSTEM
 from services.seniority import (
     candidate_tier_label,
+    compatibility_detail,
     infer_candidate_tier,
-    infer_job_tier,
-    is_compatible,
     is_job_compatible_with_profile,
     job_seniority_label,
+)
+from services.skills import (
+    deterministic_skill_overlap,
+    filter_matched_skills,
+    has_unrelated_enterprise_stack,
 )
 from services.vector_store import index_jobs, rank_by_similarity
 
 logger = get_logger(__name__)
 
-_EMBED_WEIGHT = 0.6
-_LLM_WEIGHT = 0.4
-_LEVEL_MISMATCH_CAP = 25
+_EMBED_WEIGHT = 0.45
+_SKILL_WEIGHT = 0.25
+_LLM_WEIGHT = 0.30
 _RECENCY_BONUS_HOURS = 48
 _RECENCY_BONUS_MAX = 5
 
@@ -75,6 +79,7 @@ class SemanticMatcherAgent:
                     allow_stretch=allow_stretch,
                     flex_years=flex_years,
                 )
+                and not has_unrelated_enterprise_stack(job, profile)
             ]
             logger.info(
                 f"Matcher: {len(jobs)} -> {len(eligible)} jobs after seniority pre-filter"
@@ -101,14 +106,18 @@ class SemanticMatcherAgent:
         results: list[MatchResult] = []
         for job in shortlist:
             embed_score = similarity.get(job.content_hash, 0.0) * 100
+            skill_score = deterministic_skill_overlap(profile, job)
             match = self._score_job(
                 profile,
                 job,
                 embed_score,
+                skill_score,
                 candidate_tier=candidate_tier,
                 allow_stretch=allow_stretch,
                 flex_years=flex_years,
             )
+            if strict_experience and match.recommendation == Recommendation.SKIP:
+                continue
             results.append(match)
 
         results.sort(
@@ -122,41 +131,56 @@ class SemanticMatcherAgent:
         profile: UserProfile,
         job: JobListing,
         embed_score: float,
+        skill_score: float,
         *,
         candidate_tier: int,
         allow_stretch: bool = False,
         flex_years: int | None = None,
     ) -> MatchResult:
-        job_tier = infer_job_tier(job)
-        level_ok = is_job_compatible_with_profile(
+        detail = compatibility_detail(
             job, profile, allow_stretch=allow_stretch, flex_years=flex_years
         )
+        level_ok = detail["compatible"]
 
         try:
             data = call_ollama_json(MATCHER_SYSTEM, self._user_prompt(profile, job))
             llm_score = float(data.get("match_score", 0))
-            matched = data.get("matched_skills", []) or []
+            matched = filter_matched_skills(
+                profile, data.get("matched_skills", []) or []
+            )
             missing = data.get("missing_skills", []) or []
             reasons = data.get("reasons", []) or []
             recommendation = self._to_recommendation(data.get("recommendation", ""))
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"LLM match failed for '{job.title}': {exc}")
-            llm_score = embed_score
+            llm_score = max(embed_score, skill_score)
             matched, missing, reasons = [], [], ["Scored on skill similarity only."]
             recommendation = Recommendation.CONSIDER
 
-        combined = round(_EMBED_WEIGHT * embed_score + _LLM_WEIGHT * llm_score)
+        combined = round(
+            _EMBED_WEIGHT * embed_score
+            + _SKILL_WEIGHT * skill_score
+            + _LLM_WEIGHT * llm_score
+        )
         combined += _recency_bonus(job)
         combined = max(0, min(100, combined))
 
+        if skill_score < 15 and not matched:
+            combined = min(combined, 35)
+            recommendation = Recommendation.SKIP
+            reasons = list(reasons) + [
+                "Low skill overlap with your profile — role may be unrelated."
+            ]
+
         if not level_ok:
-            combined = min(combined, _LEVEL_MISMATCH_CAP)
+            combined = min(combined, 20)
             recommendation = Recommendation.SKIP
             reasons = list(reasons) + [
                 (
-                    f"Experience mismatch: candidate is "
-                    f"{candidate_tier_label(candidate_tier)} but job is "
-                    f"{job_seniority_label(job)}."
+                    f"Experience mismatch: you are {detail['candidate_label']} "
+                    f"(target {detail['target_years']} yrs) but this job is "
+                    f"{detail['job_label']} "
+                    f"({detail['job_required_years']}+ yrs required)."
                 )
             ]
 
@@ -175,7 +199,9 @@ class SemanticMatcherAgent:
             "CANDIDATE PROFILE:\n"
             f"{profile.summary_text()}\n\n"
             "JOB:\n"
-            f"{job.match_text()[:6000]}"
+            f"{job.match_text()[:6000]}\n\n"
+            "Only list matched_skills that appear verbatim or as clear synonyms "
+            "in the candidate skills list. Never invent skills the candidate lacks."
         )
 
     @staticmethod
