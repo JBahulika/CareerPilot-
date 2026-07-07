@@ -51,7 +51,15 @@ def test_remotive_parses_fixture(monkeypatch):
     )
 
     jobs = RemotiveSource().fetch(
-        UserProfile(role="AI Engineer", experience_level="3-5 years"), limit=10
+        UserProfile(
+            role="AI Engineer",
+            experience_level="3-5 years",
+            target_years_min=3,
+            target_years_max=5,
+            skills=["Python", "PyTorch"],
+            preferred_roles=["AI Engineer"],
+        ),
+        limit=10,
     )
     assert len(jobs) == 1
     job = jobs[0]

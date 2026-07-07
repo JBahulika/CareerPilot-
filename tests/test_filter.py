@@ -20,6 +20,7 @@ def _mid_profile(**kwargs) -> UserProfile:
 
 
 def _job(title: str, desc: str = "", location: str = "Remote", skills=None) -> JobListing:
+    return JobListing(
         title=title,
         company="Acme",
         description=desc,
@@ -31,15 +32,13 @@ def _job(title: str, desc: str = "", location: str = "Remote", skills=None) -> J
 
 def test_dedup_removes_identical_jobs():
     job = _job("AI Engineer", "python ml")
-    profile = UserProfile(skills=["python"], experience_level="3-5 years")
+    profile = _mid_profile()
     kept = JobFilterAgent().run([job, job], profile)
     assert len(kept) == 1
 
 
 def test_relevance_drops_unrelated_roles():
-    profile = UserProfile(
-        skills=["python"], preferred_roles=["AI Engineer"], experience_level="3-5 years"
-    )
+    profile = _mid_profile()
     jobs = [_job("AI Engineer", "python required"), _job("Truck Driver", "cdl license")]
     kept = JobFilterAgent().run(jobs, profile)
     titles = [j.title for j in kept]
@@ -55,20 +54,14 @@ def test_exclude_internships():
 
 
 def test_location_preference_allows_remote():
-    profile = UserProfile(
-        skills=["python"], preferred_location="Bangalore", experience_level="3-5 years"
-    )
+    profile = _mid_profile(preferred_location="Bangalore")
     jobs = [_job("Python Engineer", "python", location="Remote")]
     kept = JobFilterAgent().run(jobs, profile)
     assert len(kept) == 1
 
 
 def test_location_fallback_to_resume_location():
-    profile = UserProfile(
-        skills=["python"],
-        location="Bangalore",
-        experience_level="3-5 years",
-    )
+    profile = _mid_profile(location="Bangalore", preferred_location="")
     jobs = [
         _job("Python Engineer", "python", location="Bangalore"),
         _job("Python Engineer", "python", location="Chennai"),
@@ -79,12 +72,7 @@ def test_location_fallback_to_resume_location():
 
 
 def test_include_remote_false_drops_remote_jobs():
-    profile = UserProfile(
-        skills=["python"],
-        preferred_location="Bangalore",
-        include_remote=False,
-        experience_level="3-5 years",
-    )
+    profile = _mid_profile(preferred_location="Bangalore", include_remote=False)
     jobs = [
         _job("Remote Python Engineer", "python", location="Remote"),
         _job("Local Python Engineer", "python", location="Bangalore"),
