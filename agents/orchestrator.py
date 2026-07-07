@@ -28,7 +28,7 @@ from database.repositories import (
     update_run,
     upsert_jobs,
 )
-from models.schemas import JobListing, MatchResult, RunStatus, UserProfile
+from models.schemas import JobListing, MatchResult, Recommendation, RunStatus, UserProfile
 
 logger = get_logger(__name__)
 
@@ -139,6 +139,8 @@ def _tailor_node(state: PipelineState) -> PipelineState:
     errors = list(state.get("errors", []))
 
     for match in matches:
+        if match.recommendation == Recommendation.SKIP:
+            continue
         try:
             tailored = _tailor.run(profile, match.job)
             pdf_path = _pdf.run(tailored, match.job)
@@ -161,8 +163,17 @@ def _persist_node(state: PipelineState) -> PipelineState:
     }
     save_matches(state["run_id"], matches, job_ids)
 
-    errors = state.get("errors", [])
-    status = RunStatus.COMPLETED.value if matches else RunStatus.FAILED.value
+    errors = list(state.get("errors", []))
+    if not matches:
+        errors.append(
+            "No strong matches found. Scraped jobs did not fit your profile "
+            "(experience level, AIML role, or location). Try: increase scrape limit, "
+            "use remotive or naukri source, enable stretch roles, or widen recency days."
+        )
+
+    status = RunStatus.COMPLETED.value
+    if not state.get("jobs") and not matches:
+        status = RunStatus.FAILED.value
     finish_run(state["run_id"], status=status, errors=errors)
     return {"current_step": "complete"}
 

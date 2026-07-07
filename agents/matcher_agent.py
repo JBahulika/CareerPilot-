@@ -116,9 +116,14 @@ class SemanticMatcherAgent:
                 allow_stretch=allow_stretch,
                 flex_years=flex_years,
             )
-            if strict_experience and match.recommendation == Recommendation.SKIP:
-                continue
             results.append(match)
+
+        if strict_experience:
+            non_skip = [
+                m for m in results if m.recommendation != Recommendation.SKIP
+            ]
+            if non_skip:
+                results = non_skip
 
         results.sort(
             key=lambda m: (m.match_score, m.job.posted_at or m.job.scraped_at or datetime.min),

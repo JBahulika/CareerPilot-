@@ -150,6 +150,8 @@ def role_relevant(job: JobListing, profile: UserProfile) -> bool:
         return True
 
     if skill_hits_in_text(profile, haystack) >= 2:
+        if _profile_is_aiml_focused(profile):
+            return any(_word_boundary_hit(term, haystack) for term in _AIML_DOMAIN_TERMS)
         return True
 
     return False

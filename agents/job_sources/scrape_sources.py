@@ -6,11 +6,10 @@ from datetime import datetime
 from urllib.parse import quote_plus
 
 from agents.job_sources.common import (
-    annotate_and_filter_jobs,
     build_job,
+    prepare_scraped_jobs,
     search_location,
     search_terms,
-    sort_and_filter_recent,
 )
 from core.logging import get_logger
 from models.schemas import JobListing, UserProfile
@@ -60,11 +59,8 @@ def _playwright_fetch_cards(url: str, selectors: list[str], limit: int) -> list[
 
 
 def _finalize_scrape(jobs, profile, allow_stretch, flex_years, source_name) -> list[JobListing]:
-    jobs = annotate_and_filter_jobs(
-        jobs, profile, allow_stretch=allow_stretch, flex_years=flex_years
-    )
-    jobs = sort_and_filter_recent(jobs)
-    logger.info(f"{source_name}: {len(jobs)} jobs after filters")
+    jobs = prepare_scraped_jobs(jobs)
+    logger.info(f"{source_name}: {len(jobs)} jobs after recency filter")
     return jobs
 
 
