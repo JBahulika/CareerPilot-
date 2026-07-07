@@ -98,6 +98,33 @@ _TECH_ROLE_WORDS = frozenset(
 )
 
 
+_AIML_DOMAIN_TERMS = frozenset(
+    {
+        "ai",
+        "ml",
+        "machine",
+        "learning",
+        "deep",
+        "nlp",
+        "llm",
+        "rag",
+        "pytorch",
+        "tensorflow",
+        "computer",
+        "vision",
+        "data",
+        "scientist",
+        "artificial",
+        "aiml",
+    }
+)
+
+
+def _profile_is_aiml_focused(profile: UserProfile) -> bool:
+    blob = " ".join([*profile.preferred_roles, profile.role, *profile.skills]).lower()
+    return any(term in blob for term in ("ai", "ml", "machine learning", "aiml", "llm", "deep learning"))
+
+
 def role_relevant(job: JobListing, profile: UserProfile) -> bool:
     """Job title/description should align with target roles or core skills."""
     haystack = f"{job.title} {job.description} {' '.join(job.skills)}".lower()
@@ -110,15 +137,22 @@ def role_relevant(job: JobListing, profile: UserProfile) -> bool:
         if len(token) > 2
     )
     if role_hit:
+        if _profile_is_aiml_focused(profile):
+            return any(_word_boundary_hit(term, haystack) for term in _AIML_DOMAIN_TERMS)
         return True
 
     profile_role_text = " ".join(roles).lower()
     if any(w in haystack for w in _TECH_ROLE_WORDS) and any(
         w in profile_role_text for w in _TECH_ROLE_WORDS
     ):
+        if _profile_is_aiml_focused(profile):
+            return any(_word_boundary_hit(term, haystack) for term in _AIML_DOMAIN_TERMS)
         return True
 
-    return skill_hits_in_text(profile, haystack) >= 2
+    if skill_hits_in_text(profile, haystack) >= 2:
+        return True
+
+    return False
 
 
 def has_unrelated_enterprise_stack(job: JobListing, profile: UserProfile) -> bool:
