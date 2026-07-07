@@ -31,14 +31,19 @@ def _daily_job() -> None:
     run_id = create_run(profile_id)
     logger.info(f"Daily scan starting pipeline run {run_id}")
 
+    flex = profile.flex_years if profile.flex_years is not None else settings.experience_flex_years
+
     run_pipeline(
         run_id,
         profile,
         top_n=settings.top_n_jobs,
         source=settings.job_source,
-        strict_experience=True,
-        allow_stretch=False,
+        strict_experience=profile.strict_experience,
+        allow_stretch=profile.allow_stretch,
+        flex_years=flex,
+        exclude_internships=profile.exclude_internships,
         include_remote=profile.include_remote,
+        recent_days=settings.daily_recent_jobs_days,
     )
 
     matches, _ = get_matches_for_run(run_id, offset=0, limit=settings.top_n_jobs)
@@ -46,22 +51,25 @@ def _daily_job() -> None:
     logger.info(f"Daily scan run {run_id} complete; notified={sent}")
 
 
-def start_daily_scan(hour: int = 8, minute: int = 0) -> BackgroundScheduler:
+def start_daily_scan(hour: int | None = None, minute: int | None = None) -> BackgroundScheduler:
     global _scheduler
     if _scheduler is not None and _scheduler.running:
         return _scheduler
+
+    scan_hour = hour if hour is not None else settings.daily_scan_hour
+    scan_minute = minute if minute is not None else settings.daily_scan_minute
 
     _scheduler = BackgroundScheduler()
     _scheduler.add_job(
         _daily_job,
         "cron",
-        hour=hour,
-        minute=minute,
+        hour=scan_hour,
+        minute=scan_minute,
         id="daily_scan",
         replace_existing=True,
     )
     _scheduler.start()
-    logger.info(f"Daily job scan scheduled at {hour:02d}:{minute:02d}")
+    logger.info(f"Daily job scan scheduled at {scan_hour:02d}:{scan_minute:02d}")
     return _scheduler
 
 
@@ -89,4 +97,5 @@ def get_scheduler_status() -> dict:
         "next_run": next_run,
         "hour": settings.daily_scan_hour,
         "minute": settings.daily_scan_minute,
+        "recent_days": settings.daily_recent_jobs_days,
     }

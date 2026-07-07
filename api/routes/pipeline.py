@@ -30,6 +30,7 @@ class RunRequest(BaseModel):
     strict_experience: bool = True
     allow_stretch: bool = False
     flex_years: Optional[int] = None
+    recent_days: Optional[int] = None
     location: Optional[str] = None
     include_remote: Optional[bool] = None
 
@@ -52,6 +53,7 @@ def start_pipeline(request: RunRequest, background_tasks: BackgroundTasks) -> di
         strict_experience=request.strict_experience,
         allow_stretch=request.allow_stretch,
         flex_years=request.flex_years,
+        recent_days=request.recent_days,
         location=request.location,
         include_remote=request.include_remote,
     )
