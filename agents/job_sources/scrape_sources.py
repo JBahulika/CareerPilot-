@@ -59,8 +59,8 @@ def _playwright_fetch_cards(url: str, selectors: list[str], limit: int) -> list[
 
 
 def _finalize_scrape(jobs, profile, allow_stretch, flex_years, source_name) -> list[JobListing]:
-    jobs = prepare_scraped_jobs(jobs)
-    logger.info(f"{source_name}: {len(jobs)} jobs after recency filter")
+    jobs = prepare_scraped_jobs(jobs, profile)
+    logger.info(f"{source_name}: {len(jobs)} jobs after relevance + recency filter")
     return jobs
 
 

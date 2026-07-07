@@ -22,7 +22,7 @@ class AggregateSource:
         allow_stretch: bool = False,
         flex_years: int | None = None,
     ) -> list[JobListing]:
-        per_source = max(10, limit // max(len(self._sources), 1))
+        per_source = max(20, limit // max(len(self._sources), 1))
         all_jobs: list[JobListing] = []
         seen: set[str] = set()
 

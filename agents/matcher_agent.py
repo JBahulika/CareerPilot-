@@ -30,6 +30,7 @@ from services.skills import (
     deterministic_skill_overlap,
     filter_matched_skills,
     has_unrelated_enterprise_stack,
+    is_relevant_job_posting,
 )
 from services.vector_store import index_jobs, rank_by_similarity
 
@@ -68,22 +69,21 @@ class SemanticMatcherAgent:
             return []
 
         candidate_tier = infer_candidate_tier(profile)
-        eligible = jobs
-        if strict_experience:
-            eligible = [
-                job
-                for job in jobs
-                if is_job_compatible_with_profile(
-                    job,
-                    profile,
-                    allow_stretch=allow_stretch,
-                    flex_years=flex_years,
-                )
-                and not has_unrelated_enterprise_stack(job, profile)
-            ]
-            logger.info(
-                f"Matcher: {len(jobs)} -> {len(eligible)} jobs after seniority pre-filter"
+        eligible = [
+            job
+            for job in jobs
+            if is_relevant_job_posting(job, profile)
+            and is_job_compatible_with_profile(
+                job,
+                profile,
+                allow_stretch=allow_stretch,
+                flex_years=flex_years,
             )
+            and not has_unrelated_enterprise_stack(job, profile)
+        ]
+        logger.info(
+            f"Matcher: {len(jobs)} -> {len(eligible)} jobs after relevance + seniority pre-filter"
+        )
 
         if not eligible:
             return []
@@ -118,12 +118,11 @@ class SemanticMatcherAgent:
             )
             results.append(match)
 
-        if strict_experience:
-            non_skip = [
-                m for m in results if m.recommendation != Recommendation.SKIP
-            ]
-            if non_skip:
-                results = non_skip
+        results = [
+            m
+            for m in results
+            if m.recommendation != Recommendation.SKIP and m.match_score >= 35
+        ]
 
         results.sort(
             key=lambda m: (m.match_score, m.job.posted_at or m.job.scraped_at or datetime.min),

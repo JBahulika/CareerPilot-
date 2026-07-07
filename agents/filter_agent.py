@@ -16,7 +16,7 @@ from services.seniority import (
     job_seniority_label,
 )
 from services.location import effective_location, location_filter_ok
-from services.skills import has_unrelated_enterprise_stack, role_relevant
+from services.skills import has_unrelated_enterprise_stack, is_relevant_job_posting
 
 logger = get_logger(__name__)
 
@@ -54,8 +54,8 @@ class JobFilterAgent:
                 logger.info(f"Filter: dropped '{job.title}' — unrelated tech stack")
                 continue
 
-            if not role_relevant(job, profile):
-                logger.info(f"Filter: dropped '{job.title}' — role/skill mismatch")
+            if not is_relevant_job_posting(job, profile):
+                logger.info(f"Filter: dropped '{job.title}' — not relevant to profile domain")
                 continue
 
             if not self._location_ok(job, profile):
