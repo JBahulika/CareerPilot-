@@ -72,7 +72,15 @@ def role_search_terms(profile: UserProfile) -> list[str]:
     return roles
 
 
+_SHORT_SKILL_TERMS = frozenset({"ai", "ml", "cv", "nlp", "llm", "rag", "dsa"})
+
+
 def _word_boundary_hit(term: str, haystack: str) -> bool:
+    if len(term) < 2:
+        return False
+    if term in _SHORT_SKILL_TERMS:
+        pattern = rf"\b{re.escape(term)}\b"
+        return bool(re.search(pattern, haystack, re.IGNORECASE))
     if len(term) <= 2:
         return False
     pattern = rf"\b{re.escape(term)}\b"
@@ -134,7 +142,7 @@ def role_relevant(job: JobListing, profile: UserProfile) -> bool:
         _word_boundary_hit(token, haystack)
         for role in roles
         for token in _tokens(role)
-        if len(token) > 2
+        if len(token) >= 2
     )
     if role_hit:
         if _profile_is_aiml_focused(profile):
