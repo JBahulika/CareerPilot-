@@ -40,12 +40,51 @@ EXPERIENCE_LEVEL_OPTIONS = [
     "5+ years",
 ]
 
+_EXPERIENCE_YEAR_DEFAULTS = {
+    "Fresher": (0, 0),
+    "0-1 years": (0, 1),
+    "1-3 years": (1, 3),
+    "3-5 years": (3, 5),
+    "5+ years": (5, 15),
+}
+
 
 def _api_reachable() -> bool:
     try:
         return api_get("/health").status_code == 200
     except Exception:
         return False
+
+
+def _load_profile() -> dict | None:
+    profile = st.session_state.get("profile")
+    if profile is not None:
+        return profile
+    try:
+        latest = api_get("/resume/latest")
+        if latest.status_code == 200:
+            data = latest.json()
+            st.session_state["profile_id"] = data["profile_id"]
+            st.session_state["profile"] = data["profile"]
+            return data["profile"]
+    except Exception:
+        pass
+    return None
+
+
+def _save_profile(profile: dict) -> bool:
+    profile_id = st.session_state.get("profile_id")
+    if not profile_id:
+        st.error("No profile to save.")
+        return False
+    resp = api_put(f"/resume/{profile_id}", json=profile)
+    if resp.status_code != 200:
+        st.error(resp.json().get("detail", "Could not save profile."))
+        return False
+    data = resp.json()
+    st.session_state["profile_id"] = data["profile_id"]
+    st.session_state["profile"] = data["profile"]
+    return True
 
 
 # --- Pages -------------------------------------------------------------------
@@ -61,17 +100,24 @@ def page_setup() -> None:
         return
     st.success("Backend is running.")
 
-    st.subheader("Daily auto-update")
+    st.subheader("Morning auto-update (9 AM)")
+    st.markdown(
+        "Each morning the pipeline scrapes **fresh jobs** (last 2 days), "
+        "matches them to your profile, generates tailored resumes, and writes a "
+        "digest to `logs/notifications/`. When WhatsApp is configured, the same "
+        "digest is sent to your phone."
+    )
     try:
         sched = api_get("/scheduler/status").json()
         if sched.get("running"):
             st.success(
-                f"Morning scan enabled — next run: {sched.get('next_run') or 'scheduled'}"
+                f"Next scan: **{sched.get('next_run') or 'scheduled'}** "
+                f"(jobs from last {sched.get('recent_days', 2)} days)"
             )
         elif sched.get("enabled"):
-            st.info("Daily scan is enabled but scheduler is not running. Restart the API.")
+            st.info("Daily scan enabled — restart the API to activate the scheduler.")
         else:
-            st.warning("Daily scan disabled. Set DAILY_SCAN_ENABLED=true in .env")
+            st.warning("Daily scan disabled. Set `DAILY_SCAN_ENABLED=true` in `.env`.")
 
         col1, col2 = st.columns(2)
         col1.metric("Notifier", sched.get("notifier_backend", "local"))
@@ -92,18 +138,21 @@ def page_setup() -> None:
             st.success(status.get("message"))
         else:
             st.warning(status.get("message"))
-            st.code("ollama serve\nollama pull " + status.get("model", "qwen2.5:7b"))
+            st.code(
+                "ollama pull qwen2.5:7b\n"
+                "# On Mac, open the Ollama app — no need to run ollama serve"
+            )
     except Exception as exc:  # noqa: BLE001
         st.error(f"Could not check Ollama status: {exc}")
 
 
 def page_profile() -> None:
     st.header("Profile")
-    st.caption("Upload your master resume (PDF). It is parsed locally and never leaves your machine.")
+    st.caption("Upload your resume once. Set experience, roles, location, and matching rules here.")
 
     uploaded = st.file_uploader("Master resume (PDF)", type=["pdf"])
     if uploaded is not None and st.button("Parse resume", type="primary"):
-        with st.spinner("Parsing resume with the local LLM..."):
+        with st.spinner("Parsing resume locally..."):
             try:
                 resp = api_post(
                     "/resume/upload",
@@ -118,118 +167,133 @@ def page_profile() -> None:
         data = resp.json()
         st.session_state["profile_id"] = data["profile_id"]
         st.session_state["profile"] = data["profile"]
-        st.success(f"Parsed profile (id {data['profile_id']}).")
+        st.success(f"Parsed profile (id {data['profile_id']}). Review and save below.")
+        st.rerun()
 
-    profile = st.session_state.get("profile")
-    if profile is None:
-        try:
-            latest = api_get("/resume/latest")
-            if latest.status_code == 200:
-                data = latest.json()
-                st.session_state["profile_id"] = data["profile_id"]
-                st.session_state["profile"] = data["profile"]
-                profile = data["profile"]
-        except Exception:
-            pass
+    profile = _load_profile()
+    if not profile:
+        st.info("Upload a resume PDF to get started.")
+        return
 
-    if profile:
-        st.subheader("Parsed profile")
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Name", profile.get("name") or "—")
-        col2.metric("Role", profile.get("role") or "—")
-        col3.metric("Experience", profile.get("experience_level") or "—")
+    st.subheader("Parsed summary")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Name", profile.get("name") or "—")
+    col2.metric("Role", profile.get("role") or "—")
+    col3.metric("Location", profile.get("preferred_location") or profile.get("location") or "—")
 
-        current_level = profile.get("experience_level") or "Fresher"
-        if current_level not in EXPERIENCE_LEVEL_OPTIONS:
-            EXPERIENCE_LEVEL_OPTIONS_WITH_CURRENT = [current_level, *EXPERIENCE_LEVEL_OPTIONS]
-        else:
-            EXPERIENCE_LEVEL_OPTIONS_WITH_CURRENT = EXPERIENCE_LEVEL_OPTIONS
+    st.write("**Skills:** " + (", ".join(profile.get("skills", [])) or "—"))
+    st.write("**Preferred roles:** " + (", ".join(profile.get("preferred_roles", [])) or "—"))
 
-        selected_level = st.selectbox(
-            "Experience level (edit if the parser got it wrong)",
-            EXPERIENCE_LEVEL_OPTIONS_WITH_CURRENT,
-            index=EXPERIENCE_LEVEL_OPTIONS_WITH_CURRENT.index(current_level),
-        )
-        if selected_level != current_level and st.button("Save experience level"):
-            profile["experience_level"] = selected_level
-            profile_id = st.session_state.get("profile_id")
-            resp = api_put(f"/resume/{profile_id}", json=profile)
-            if resp.status_code == 200:
-                data = resp.json()
-                st.session_state["profile_id"] = data["profile_id"]
-                st.session_state["profile"] = data["profile"]
-                st.success(f"Updated experience level to '{selected_level}'.")
-            else:
-                st.error(resp.json().get("detail", "Could not save profile."))
+    st.divider()
+    st.subheader("Your search preferences")
+    st.caption("Everything below is saved once and reused by Run Pipeline and the morning scan.")
 
-        st.write("**Skills:** " + ", ".join(profile.get("skills", [])) or "—")
-        st.write("**Preferred roles:** " + ", ".join(profile.get("preferred_roles", [])))
+    current_level = profile.get("experience_level") or "Fresher"
+    level_options = (
+        [current_level, *EXPERIENCE_LEVEL_OPTIONS]
+        if current_level not in EXPERIENCE_LEVEL_OPTIONS
+        else EXPERIENCE_LEVEL_OPTIONS
+    )
+    selected_level = st.selectbox(
+        "Experience level",
+        level_options,
+        index=level_options.index(current_level),
+        help="Used for seniority filtering. Pick what best matches your resume.",
+    )
+    defaults = _EXPERIENCE_YEAR_DEFAULTS.get(selected_level, (0, 2))
+    exp_col1, exp_col2 = st.columns(2)
+    ymin = exp_col1.number_input(
+        "Target years (min)",
+        0,
+        20,
+        int(profile.get("target_years_min") if profile.get("target_years_min") is not None else defaults[0]),
+    )
+    ymax = exp_col2.number_input(
+        "Target years (max)",
+        0,
+        20,
+        int(profile.get("target_years_max") if profile.get("target_years_max") is not None else defaults[1]),
+    )
+    st.caption(
+        f"**{selected_level}** → target **{ymin}–{ymax} years**. "
+        "Jobs outside this band are dropped unless stretch is enabled."
+    )
 
-        st.subheader("Location preferences")
-        default_loc = profile.get("preferred_location") or profile.get("location") or ""
-        preferred_loc = st.text_input(
-            "Preferred location",
-            value=default_loc,
-            placeholder="e.g. Bangalore, Remote, New York",
-        )
-        include_remote_profile = st.checkbox(
-            "Include remote jobs",
-            value=profile.get("include_remote", True),
-        )
-        if st.button("Save location preferences"):
-            profile["preferred_location"] = preferred_loc.strip()
-            profile["include_remote"] = include_remote_profile
-            profile_id = st.session_state.get("profile_id")
-            resp = api_put(f"/resume/{profile_id}", json=profile)
-            if resp.status_code == 200:
-                data = resp.json()
-                st.session_state["profile_id"] = data["profile_id"]
-                st.session_state["profile"] = data["profile"]
-                st.success("Saved location preferences.")
-            else:
-                st.error(resp.json().get("detail", "Could not save profile."))
+    preferred_loc = st.text_input(
+        "Preferred job location",
+        value=profile.get("preferred_location") or profile.get("location") or "",
+        placeholder="e.g. Bangalore, Mumbai, Remote",
+        help="City or region. Remote jobs are included when the checkbox below is on.",
+    )
+    include_remote = st.checkbox(
+        "Include remote jobs",
+        value=profile.get("include_remote", True),
+    )
 
-        st.subheader("Experience range (flexible matching)")
-        exp_col1, exp_col2, exp_col3 = st.columns(3)
-        ymin = exp_col1.number_input(
-            "Min years target",
-            0,
-            20,
-            int(profile.get("target_years_min") or 0),
-        )
-        ymax = exp_col2.number_input(
-            "Max years target",
-            0,
-            20,
-            int(profile.get("target_years_max") or 2),
-        )
-        st.caption(
-            "Jobs within this range (plus flexibility below) will be included. "
-            "Set 0–2 for entry level, 2–5 for mid, etc."
-        )
-        if st.button("Save experience range"):
-            profile["target_years_min"] = int(ymin)
-            profile["target_years_max"] = int(ymax)
-            profile_id = st.session_state.get("profile_id")
-            resp = api_put(f"/resume/{profile_id}", json=profile)
-            if resp.status_code == 200:
-                data = resp.json()
-                st.session_state["profile_id"] = data["profile_id"]
-                st.session_state["profile"] = data["profile"]
-                st.success(f"Saved target range {ymin}-{ymax} years.")
-            else:
-                st.error(resp.json().get("detail", "Could not save profile."))
+    st.markdown("**Matching rules**")
+    strict_experience = st.checkbox(
+        "Strict experience matching",
+        value=profile.get("strict_experience", True),
+        help="When on, senior/lead roles are blocked for entry-level profiles (recommended).",
+    )
+    allow_stretch = st.checkbox(
+        "Include stretch roles",
+        value=profile.get("allow_stretch", False),
+        help="Allow jobs slightly above your tier (e.g. mid-level when you are junior). Off by default.",
+    )
+    flex_years = st.slider(
+        "Year flexibility (+/-)",
+        0,
+        3,
+        int(profile.get("flex_years") if profile.get("flex_years") is not None else 1),
+        help="How many years beyond your target range to still consider. Use 0–1 for tight matching.",
+    )
+    exclude_internships = st.checkbox(
+        "Exclude internships",
+        value=profile.get("exclude_internships", False),
+    )
 
-        with st.expander("Full parsed JSON"):
-            st.json(profile)
+    if st.button("Save profile", type="primary"):
+        profile["experience_level"] = selected_level
+        profile["target_years_min"] = int(ymin)
+        profile["target_years_max"] = int(ymax)
+        profile["preferred_location"] = preferred_loc.strip()
+        profile["include_remote"] = include_remote
+        profile["strict_experience"] = strict_experience
+        profile["allow_stretch"] = allow_stretch
+        profile["flex_years"] = int(flex_years)
+        profile["exclude_internships"] = exclude_internships
+        if _save_profile(profile):
+            st.success("Profile saved. Ready to run the pipeline.")
 
 
 def page_run() -> None:
     st.header("Run Pipeline")
     profile_id = st.session_state.get("profile_id")
-    if not profile_id:
-        st.info("Upload a resume on the Profile page first.")
+    profile = _load_profile()
+    if not profile_id or not profile:
+        st.info("Upload and save your profile first.")
         return
+
+    st.markdown(
+        """
+**What this does:** scrape latest jobs → filter by your experience & skills →
+rank matches → generate tailored PDF resumes.
+
+Settings come from your **Profile** (experience, location, strict/stretch rules).
+        """
+    )
+
+    loc = profile.get("preferred_location") or profile.get("location") or "Any"
+    remote = "yes" if profile.get("include_remote", True) else "no"
+    st.info(
+        f"Using profile: **{profile.get('experience_level')}** "
+        f"({profile.get('target_years_min', 0)}–{profile.get('target_years_max', 1)} yrs) · "
+        f"roles: {', '.join(profile.get('preferred_roles', [])[:3]) or profile.get('role', '—')} · "
+        f"location: **{loc}** · remote: **{remote}** · "
+        f"strict: **{'on' if profile.get('strict_experience', True) else 'off'}** · "
+        f"stretch: **{'on' if profile.get('allow_stretch') else 'off'}**"
+    )
 
     try:
         sources_resp = api_get("/jobs/sources").json()
@@ -242,38 +306,28 @@ def page_run() -> None:
         source_labels = {s: s for s in source_options}
 
     col1, col2, col3 = st.columns(3)
-    top_n = col1.number_input("Top N jobs", 1, 15, 10)
+    top_n = col1.number_input("Top N to tailor", 1, 15, 10)
     source = col2.selectbox(
         "Job source",
         source_options,
         index=source_options.index("all") if "all" in source_options else 0,
         format_func=lambda x: source_labels.get(x, x),
     )
-    scrape_limit = col3.number_input("Scrape limit", 10, 300, 100, step=10)
+    scrape_limit = col3.number_input("Max jobs to scrape", 10, 300, 100, step=10)
 
-    profile = st.session_state.get("profile") or {}
-    default_run_loc = profile.get("preferred_location") or profile.get("location") or ""
-    loc_col1, loc_col2 = st.columns(2)
-    run_location = loc_col1.text_input(
-        "Location (override for this run)",
-        value=default_run_loc,
-        placeholder="Leave as-is to use profile location",
-    )
-    include_remote = loc_col2.checkbox(
-        "Include remote jobs",
-        value=profile.get("include_remote", True),
-    )
-
-    exclude_internships = st.checkbox("Exclude internships", value=False)
-    strict_experience = st.checkbox("Strict experience matching", value=True)
-    allow_stretch = st.checkbox("Include stretch roles", value=True)
-    flex_years = st.slider("Experience flexibility (+/- years)", 0, 5, 2)
-
-    with st.expander("Supported job boards"):
-        for sid in source_options:
-            if sid == "all":
-                continue
-            st.write(f"- **{source_labels.get(sid, sid)}**")
+    with st.expander("Override for this run only (optional)"):
+        run_location = st.text_input(
+            "Location override",
+            value="",
+            placeholder="Leave blank to use profile location",
+        )
+        recent_days = st.slider(
+            "Only jobs posted in last N days",
+            1,
+            14,
+            3,
+            help="Lower = fresher listings. Morning scan uses 2 days.",
+        )
 
     if st.button("Run pipeline", type="primary"):
         payload = {
@@ -281,11 +335,12 @@ def page_run() -> None:
             "top_n": int(top_n),
             "source": source,
             "scrape_limit": int(scrape_limit),
-            "exclude_internships": exclude_internships,
-            "strict_experience": strict_experience,
-            "allow_stretch": allow_stretch,
-            "flex_years": int(flex_years),
-            "include_remote": include_remote,
+            "exclude_internships": profile.get("exclude_internships", False),
+            "strict_experience": profile.get("strict_experience", True),
+            "allow_stretch": profile.get("allow_stretch", False),
+            "flex_years": profile.get("flex_years"),
+            "include_remote": profile.get("include_remote", True),
+            "recent_days": int(recent_days),
         }
         if run_location.strip():
             payload["location"] = run_location.strip()
@@ -303,7 +358,7 @@ def _poll_run(run_id: int) -> None:
     status_box = st.empty()
     steps = {"scrape": 0.2, "filter": 0.4, "match": 0.6, "tailor": 0.85, "complete": 1.0}
 
-    for _ in range(600):  # up to ~10 minutes
+    for _ in range(600):
         run = api_get(f"/pipeline/runs/{run_id}").json()
         step = run.get("current_step", "")
         progress.progress(steps.get(step, 0.05))
@@ -392,8 +447,8 @@ def page_results() -> None:
                 + (f" · {posted_label}" if posted_label else "")
             )
             cols = st.columns(2)
-            cols[0].write("**Matched:** " + ", ".join(m.get("matched_skills", [])))
-            cols[1].write("**Missing:** " + ", ".join(m.get("missing_skills", [])))
+            cols[0].write("**Matched:** " + ", ".join(m.get("matched_skills", [])) or "—")
+            cols[1].write("**Missing:** " + ", ".join(m.get("missing_skills", [])) or "—")
             if m.get("reasons"):
                 st.write("\n".join(f"- {r}" for r in m["reasons"]))
             if m.get("apply_url"):
@@ -423,14 +478,20 @@ def page_history() -> None:
     st.dataframe(runs, use_container_width=True)
 
 
-# --- App shell ---------------------------------------------------------------
 def main() -> None:
     st.sidebar.title("🧭 CareerPilot AI")
     page = st.sidebar.radio(
         "Navigate",
         ["Setup", "Profile", "Run Pipeline", "Results", "History"],
     )
-    st.sidebar.caption("Local-first autonomous job application assistant.")
+    st.sidebar.caption("Local-first job discovery & resume tailoring.")
+    st.sidebar.markdown(
+        "**Quick start**\n"
+        "1. Setup — check Ollama\n"
+        "2. Profile — upload & save\n"
+        "3. Run Pipeline\n"
+        "4. Results — download PDFs"
+    )
 
     {
         "Setup": page_setup,
