@@ -49,34 +49,15 @@ def parse_posted_at(value: str | None) -> datetime | None:
 
 
 def search_terms(profile: UserProfile) -> str:
-    from services.skills import role_search_terms
+    """Single string for scrapers that accept one query (legacy)."""
+    queries = search_queries(profile)
+    return queries[0] if queries else "software engineer"
 
-    roles = role_search_terms(profile)
-    base = " ".join(roles)
-    skill_blob = " ".join(profile.skills).lower()
-    aiml_boost: list[str] = []
-    if any(
-        k in skill_blob
-        for k in (
-            "pytorch",
-            "tensorflow",
-            "langchain",
-            "langgraph",
-            "llm",
-            "machine learning",
-            "deep learning",
-            "nlp",
-            "computer vision",
-        )
-    ):
-        aiml_boost = ["AI engineer", "machine learning engineer", "ML engineer"]
-    tier = infer_candidate_tier(profile)
-    parts = [base, *aiml_boost]
-    if tier <= 1:
-        parts.append("junior entry level graduate")
-    elif tier == 2:
-        parts.append("mid level")
-    return " ".join(dict.fromkeys(p for p in parts if p))
+
+def search_queries(profile: UserProfile) -> list[str]:
+    from services.skills import search_queries as _queries
+
+    return _queries(profile)
 
 
 def search_location(profile: UserProfile) -> str:
@@ -123,14 +104,16 @@ def annotate_and_filter_jobs(
     return kept
 
 
-def prepare_scraped_jobs(jobs: list[JobListing]) -> list[JobListing]:
-    """Light post-process at scrape time: label seniority + recency only.
+def prepare_scraped_jobs(
+    jobs: list[JobListing], profile: UserProfile | None = None
+) -> list[JobListing]:
+    """Label seniority, apply domain relevance, then recency sort."""
+    from services.skills import is_relevant_job_posting
 
-    Experience, role, and location gating happen in the filter agent so we
-    do not over-prune before the pipeline sees listings.
-    """
     for job in jobs:
         job.experience = experience_label_for_job(job)
+    if profile is not None:
+        jobs = [j for j in jobs if is_relevant_job_posting(j, profile)]
     return sort_and_filter_recent(jobs)
 
 

@@ -36,6 +36,85 @@ _SKILL_ALIASES: dict[str, list[str]] = {
 
 _WORD_RE = re.compile(r"[a-z0-9+#.]+", re.IGNORECASE)
 
+# Titles that are almost never AIML/software roles for our users.
+_EXCLUDED_TITLE_PATTERNS = [
+    r"\bproposal\s+manager\b",
+    r"\brisk\s+manager\b",
+    r"\baccount\s+manager\b",
+    r"\bsales\s+(?:manager|rep|executive)\b",
+    r"\bmarketing\s+(?:manager|lead|director|operations)\b",
+    r"\blifecycle\s+operations\b",
+    r"\bcustomer\s+(?:support|success)\b",
+    r"\brecruiter\b",
+    r"\bhr\s+(?:manager|generalist)\b",
+    r"\baccountant\b",
+    r"\blawyer\b",
+    r"\btruck\s+driver\b",
+    r"\bnurse\b",
+    r"\bcontent\s+writer\b",
+    r"\bprogram\s+manager\b(?!.*\b(?:engineer|technical|ml|ai)\b)",
+]
+
+_TECH_TITLE_WORDS = frozenset(
+    {
+        "engineer",
+        "developer",
+        "scientist",
+        "analyst",
+        "architect",
+        "programmer",
+        "intern",
+        "graduate",
+        "researcher",
+    }
+)
+
+_AIML_STRONG_TERMS = frozenset(
+    {
+        "ai",
+        "ml",
+        "aiml",
+        "machine learning",
+        "deep learning",
+        "artificial intelligence",
+        "nlp",
+        "llm",
+        "rag",
+        "pytorch",
+        "tensorflow",
+        "langchain",
+        "langgraph",
+        "computer vision",
+        "data scientist",
+        "ml engineer",
+        "ai engineer",
+    }
+)
+
+_AIML_DOMAIN_TERMS = frozenset(
+    {
+        "ai",
+        "ml",
+        "machine",
+        "learning",
+        "deep",
+        "nlp",
+        "llm",
+        "rag",
+        "pytorch",
+        "tensorflow",
+        "computer",
+        "vision",
+        "scientist",
+        "artificial",
+        "aiml",
+        "langchain",
+        "langgraph",
+    }
+)
+
+_SHORT_SKILL_TERMS = frozenset({"ai", "ml", "cv", "nlp", "llm", "rag", "dsa"})
+
 
 def _tokens(text: str) -> set[str]:
     return {t.lower() for t in _WORD_RE.findall(text or "") if len(t) > 1}
@@ -72,7 +151,44 @@ def role_search_terms(profile: UserProfile) -> list[str]:
     return roles
 
 
-_SHORT_SKILL_TERMS = frozenset({"ai", "ml", "cv", "nlp", "llm", "rag", "dsa"})
+def search_queries(profile: UserProfile) -> list[str]:
+    """Distinct search strings for job board APIs (most specific first)."""
+    from services.seniority import infer_candidate_tier
+
+    roles = role_search_terms(profile)
+    queries: list[str] = list(roles)
+
+    if _profile_is_aiml_focused(profile):
+        queries.extend(
+            [
+                "machine learning engineer",
+                "AI engineer",
+                "ML engineer",
+                "data scientist",
+                "deep learning engineer",
+                "NLP engineer",
+                "LLM engineer",
+            ]
+        )
+        tier = infer_candidate_tier(profile)
+        if tier <= 1:
+            queries.extend(
+                [
+                    "junior machine learning engineer",
+                    "graduate AI engineer",
+                    "entry level ML engineer",
+                ]
+            )
+
+    # Dedupe while preserving order
+    seen: set[str] = set()
+    out: list[str] = []
+    for q in queries:
+        key = q.lower().strip()
+        if key and key not in seen:
+            seen.add(key)
+            out.append(q.strip())
+    return out
 
 
 def _word_boundary_hit(term: str, haystack: str) -> bool:
@@ -85,6 +201,89 @@ def _word_boundary_hit(term: str, haystack: str) -> bool:
         return False
     pattern = rf"\b{re.escape(term)}\b"
     return bool(re.search(pattern, haystack, re.IGNORECASE))
+
+
+def _aiml_hits(text: str) -> int:
+    lowered = text.lower()
+    hits = 0
+    for term in _AIML_STRONG_TERMS:
+        if " " in term:
+            if term in lowered:
+                hits += 1
+        elif _word_boundary_hit(term, lowered):
+            hits += 1
+    return hits
+
+
+def is_excluded_job_title(title: str) -> bool:
+    lowered = (title or "").lower()
+    return any(re.search(p, lowered) for p in _EXCLUDED_TITLE_PATTERNS)
+
+
+def _profile_is_aiml_focused(profile: UserProfile) -> bool:
+    blob = " ".join([*profile.preferred_roles, profile.role, *profile.skills]).lower()
+    return any(
+        term in blob
+        for term in (
+            "ai",
+            "ml",
+            "machine learning",
+            "aiml",
+            "llm",
+            "deep learning",
+            "pytorch",
+            "tensorflow",
+            "langchain",
+        )
+    )
+
+
+def is_relevant_job_posting(job: JobListing, profile: UserProfile) -> bool:
+    """Strict gate: is this job posting in the right domain for this profile?"""
+    title = (job.title or "").lower()
+    haystack = f"{job.title} {job.description} {' '.join(job.skills)}".lower()
+
+    if is_excluded_job_title(job.title):
+        return False
+
+    if has_unrelated_enterprise_stack(job, profile):
+        return False
+
+    if not _profile_is_aiml_focused(profile):
+        return role_relevant(job, profile)
+
+    # --- AIML profile: require clear technical AIML signals ---
+    title_aiml_hits = _aiml_hits(job.title)
+    full_aiml_hits = _aiml_hits(haystack)
+    has_tech_title = any(_word_boundary_hit(w, title) for w in _TECH_TITLE_WORDS)
+
+    # Strong pass: AIML signal in title + technical role title
+    if title_aiml_hits >= 1 and has_tech_title:
+        return True
+
+    # Preferred role phrase appears in title (e.g. "Machine Learning Engineer")
+    for role in role_search_terms(profile):
+        role_lower = role.lower()
+        if len(role_lower) > 5 and role_lower in title:
+            return True
+        role_tokens = [t for t in _tokens(role) if len(t) >= 2]
+        if len(role_tokens) >= 2 and all(_word_boundary_hit(t, title) for t in role_tokens[:3]):
+            return True
+
+    # Title has tech role + multiple AIML terms in full text
+    if has_tech_title and full_aiml_hits >= 2:
+        return True
+
+    # At least 2 profile skills hit + AIML term somewhere
+    if skill_hits_in_text(profile, haystack) >= 2 and full_aiml_hits >= 1 and has_tech_title:
+        return True
+
+    return False
+
+
+def matches_scrape_keywords(job: JobListing, profile: UserProfile) -> bool:
+    """Used during scraping to drop obvious noise before the filter stage."""
+    return is_relevant_job_posting(job, profile)
 
 
 def skill_hits_in_text(profile: UserProfile, text: str) -> int:
@@ -106,35 +305,11 @@ _TECH_ROLE_WORDS = frozenset(
 )
 
 
-_AIML_DOMAIN_TERMS = frozenset(
-    {
-        "ai",
-        "ml",
-        "machine",
-        "learning",
-        "deep",
-        "nlp",
-        "llm",
-        "rag",
-        "pytorch",
-        "tensorflow",
-        "computer",
-        "vision",
-        "data",
-        "scientist",
-        "artificial",
-        "aiml",
-    }
-)
-
-
-def _profile_is_aiml_focused(profile: UserProfile) -> bool:
-    blob = " ".join([*profile.preferred_roles, profile.role, *profile.skills]).lower()
-    return any(term in blob for term in ("ai", "ml", "machine learning", "aiml", "llm", "deep learning"))
-
-
 def role_relevant(job: JobListing, profile: UserProfile) -> bool:
     """Job title/description should align with target roles or core skills."""
+    if is_excluded_job_title(job.title):
+        return False
+
     haystack = f"{job.title} {job.description} {' '.join(job.skills)}".lower()
     roles = role_search_terms(profile)
 
@@ -146,7 +321,7 @@ def role_relevant(job: JobListing, profile: UserProfile) -> bool:
     )
     if role_hit:
         if _profile_is_aiml_focused(profile):
-            return any(_word_boundary_hit(term, haystack) for term in _AIML_DOMAIN_TERMS)
+            return _aiml_hits(haystack) >= 1
         return True
 
     profile_role_text = " ".join(roles).lower()
@@ -154,12 +329,12 @@ def role_relevant(job: JobListing, profile: UserProfile) -> bool:
         w in profile_role_text for w in _TECH_ROLE_WORDS
     ):
         if _profile_is_aiml_focused(profile):
-            return any(_word_boundary_hit(term, haystack) for term in _AIML_DOMAIN_TERMS)
+            return _aiml_hits(haystack) >= 1
         return True
 
     if skill_hits_in_text(profile, haystack) >= 2:
         if _profile_is_aiml_focused(profile):
-            return any(_word_boundary_hit(term, haystack) for term in _AIML_DOMAIN_TERMS)
+            return _aiml_hits(haystack) >= 1
         return True
 
     return False
