@@ -21,10 +21,10 @@ TIER_LABELS = {
     5: "Executive",
 }
 
-# How many tiers above/below the candidate's level are allowed by default.
+# Tight bands for entry candidates — tier 0 may only reach junior (+1).
 _ALLOWED_ABOVE: dict[int, int] = {
-    0: 2,
-    1: 2,
+    0: 1,
+    1: 1,
     2: 2,
     3: 2,
     4: 2,
@@ -63,6 +63,39 @@ _YEARS_REQUIRED_RE = re.compile(
 )
 _YEARS_EXPERIENCE_RE = re.compile(r"(\d+)\+?\s*years?\s+(?:of\s+)?experience", re.IGNORECASE)
 _EXPERIENCE_LEVEL_RE = re.compile(r"(\d+)\s*[-–]\s*(\d+)\s*years?", re.IGNORECASE)
+
+
+def default_target_years(profile: UserProfile) -> tuple[int, int]:
+    """Map experience_level to a sensible default year range when unset."""
+    level = (profile.experience_level or "").strip().lower()
+    if level in ("fresher", "fresh graduate", "new grad", "student"):
+        return 0, 0
+    if "intern" in level:
+        return 0, 0
+    if "0-1" in level or "0 - 1" in level:
+        return 0, 1
+    if "1-3" in level:
+        return 1, 3
+    if "3-5" in level:
+        return 3, 5
+    if "5+" in level or level.startswith("5"):
+        return 5, 15
+    tier = _parse_years_from_level(profile.experience_level)
+    if tier == 0:
+        return 0, 1
+    if tier == 1:
+        return 0, 2
+    if tier == 2:
+        return 2, 5
+    if tier == 3:
+        return 4, 8
+    return 5, 15
+
+
+def effective_target_years(profile: UserProfile) -> tuple[int, int]:
+    if profile.target_years_min is not None and profile.target_years_max is not None:
+        return profile.target_years_min, profile.target_years_max
+    return default_target_years(profile)
 
 
 def _text_has_any(text: str, patterns: list[str]) -> bool:
@@ -107,7 +140,9 @@ def _parse_years_from_level(level: str) -> int | None:
             return 3
         return 4
 
-    if any(w in lowered for w in ("entry", "junior", "0-1", "0 - 1")):
+    if any(w in lowered for w in ("0-1", "0 - 1")):
+        return 0
+    if any(w in lowered for w in ("entry", "junior")):
         return 1
     if any(w in lowered for w in ("mid", "intermediate", "1-3", "2-4")):
         return 2
@@ -141,7 +176,6 @@ def _years_from_work_history(profile: UserProfile) -> int | None:
         if year_match:
             total_months += int(year_match.group(1)) * 12
             continue
-        # Unknown duration — assume ~1 year per role
         total_months += 12
 
     years = total_months / 12
@@ -162,10 +196,8 @@ def _tier_to_years(tier: int) -> float:
 
 def infer_candidate_years(profile: UserProfile) -> float:
     """Estimate candidate years of experience as a float."""
-    if profile.target_years_min is not None and profile.target_years_max is not None:
-        return (profile.target_years_min + profile.target_years_max) / 2
-    tier = infer_candidate_tier(profile)
-    return _tier_to_years(tier)
+    min_y, max_y = effective_target_years(profile)
+    return (min_y + max_y) / 2
 
 
 def infer_candidate_tier(profile: UserProfile) -> int:
@@ -201,7 +233,7 @@ def is_years_compatible(
     profile: UserProfile,
     job: JobListing,
     *,
-    flex_years: int = 2,
+    flex_years: int = 1,
     allow_stretch: bool = False,
 ) -> bool:
     """Flexible year-range check using profile target range or inferred years."""
@@ -210,13 +242,10 @@ def is_years_compatible(
         return True
 
     flex = flex_years + (1 if allow_stretch else 0)
-    if profile.target_years_min is not None and profile.target_years_max is not None:
-        min_y = max(0, profile.target_years_min - flex)
-        max_y = profile.target_years_max + flex
-        return min_y <= job_years <= max_y
-
-    candidate_years = infer_candidate_years(profile)
-    return job_years <= candidate_years + flex + 1 and job_years >= max(0, candidate_years - flex)
+    min_y, max_y = effective_target_years(profile)
+    min_allowed = max(0, min_y - flex)
+    max_allowed = max_y + flex
+    return min_allowed <= job_years <= max_allowed
 
 
 def infer_job_tier_from_text(title: str, description: str = "") -> int:
@@ -224,7 +253,6 @@ def infer_job_tier_from_text(title: str, description: str = "") -> int:
     haystack = f"{title} {description}"
     lowered = haystack.lower()
 
-    # Years-required signals override title ambiguity.
     max_required_years = 0
     for pattern in (_YEARS_REQUIRED_RE, _YEARS_EXPERIENCE_RE):
         for match in pattern.finditer(haystack):
@@ -243,7 +271,6 @@ def infer_job_tier_from_text(title: str, description: str = "") -> int:
     else:
         tier_from_years = None
 
-    # Title-based signals (check lead/staff before generic senior).
     if _text_has_any(lowered, [r"\bexecutive\b", r"\bvp\b", r"\bvice president\b"]):
         title_tier = 5
     elif _text_has_any(
@@ -263,9 +290,9 @@ def infer_job_tier_from_text(title: str, description: str = "") -> int:
     elif _text_has_any(lowered, _ENTRY_TITLE_PATTERNS):
         title_tier = 1 if "intern" not in lowered else 0
     elif re.search(r"\bengineer\b|\bdeveloper\b|\banalyst\b", lowered):
-        title_tier = 2  # generic title — assume mid unless years say otherwise
+        title_tier = 1
     else:
-        title_tier = 2
+        title_tier = 1
 
     if tier_from_years is not None:
         return max(title_tier, tier_from_years)
@@ -288,7 +315,7 @@ def is_compatible(
     """Return True when the job tier is within the candidate's allowed band."""
     stretch = 1 if allow_stretch else 0
     extra = flex_tiers + stretch
-    max_allowed = candidate_tier + _ALLOWED_ABOVE.get(candidate_tier, 2) + extra
+    max_allowed = candidate_tier + _ALLOWED_ABOVE.get(candidate_tier, 1) + extra
     below = _ALLOWED_BELOW.get(candidate_tier, 1)
     min_allowed = 0 if candidate_tier <= 1 else max(0, candidate_tier - below - extra)
     return min_allowed <= job_tier <= max_allowed
@@ -314,6 +341,36 @@ def experience_label_for_job(job: JobListing) -> str:
     return label
 
 
+def compatibility_detail(
+    job: JobListing,
+    profile: UserProfile,
+    *,
+    allow_stretch: bool = False,
+    flex_years: int | None = None,
+) -> dict:
+    from core.config import settings
+
+    flex = flex_years if flex_years is not None else settings.experience_flex_years
+    cand_tier = infer_candidate_tier(profile)
+    job_tier = infer_job_tier(job)
+    tier_ok = is_compatible(cand_tier, job_tier, allow_stretch=allow_stretch)
+    years_ok = is_years_compatible(
+        profile, job, flex_years=flex, allow_stretch=allow_stretch
+    )
+    min_y, max_y = effective_target_years(profile)
+    return {
+        "candidate_tier": cand_tier,
+        "candidate_label": candidate_tier_label(cand_tier),
+        "job_tier": job_tier,
+        "job_label": job_seniority_label(job),
+        "tier_ok": tier_ok,
+        "years_ok": years_ok,
+        "target_years": f"{min_y}-{max_y}",
+        "job_required_years": infer_job_required_years(job),
+        "compatible": tier_ok and years_ok,
+    }
+
+
 def is_job_compatible_with_profile(
     job: JobListing,
     profile: UserProfile,
@@ -324,12 +381,7 @@ def is_job_compatible_with_profile(
     from core.config import settings
 
     flex = flex_years if flex_years is not None else settings.experience_flex_years
-    tier_ok = is_compatible(
-        infer_candidate_tier(profile),
-        infer_job_tier(job),
-        allow_stretch=allow_stretch,
+    detail = compatibility_detail(
+        job, profile, allow_stretch=allow_stretch, flex_years=flex
     )
-    years_ok = is_years_compatible(
-        profile, job, flex_years=flex, allow_stretch=allow_stretch
-    )
-    return tier_ok or years_ok
+    return detail["compatible"]
