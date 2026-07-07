@@ -48,9 +48,11 @@ return ONLY valid JSON matching this schema:
 
 Rules:
 - Base the score on skills overlap, experience level, and role relevance.
+- matched_skills must come ONLY from the candidate's listed skills — never invent ABAP, SAP, or other skills not on the profile.
 - Experience level is critical: compare candidate seniority to job seniority.
-- If the job requires 3+ more years of experience than the candidate has, set match_score below 30 and recommendation to "Skip".
+- If the job requires 2+ more years of experience than the candidate's target range, set match_score below 25 and recommendation to "Skip".
 - Senior, Lead, Principal, Staff, or Director roles are a poor fit for Fresher / 0-1 year candidates — recommend "Skip".
+- Unrelated enterprise stacks (ABAP, SAP, mainframe) when the candidate has no such skills → recommend "Skip".
 - Be honest about gaps; do not inflate scores.
 - Return JSON only, no commentary."""
 

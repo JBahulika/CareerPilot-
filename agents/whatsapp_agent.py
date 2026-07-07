@@ -17,24 +17,36 @@ logger = get_logger(__name__)
 
 
 def format_digest(matches: list[dict], profile_name: str = "") -> str:
-    """Build a PRD-style text digest from match dicts."""
+    """Build a morning digest with fresh jobs and tailored resume paths."""
+    from datetime import datetime
+
+    stamp = datetime.now().strftime("%a %d %b, %I:%M %p")
     count = len(matches)
-    header = f"{count} New Job{'s' if count != 1 else ''} Found"
+    header = f"CareerPilot — {count} new match{'es' if count != 1 else ''} ({stamp})"
     if profile_name:
-        header = f"{header} for {profile_name}"
+        header = f"{header}\nFor {profile_name}"
+
+    if count == 0:
+        return f"{header}\n\nNo new matching jobs this morning. Check back after the next scan."
 
     lines = [header, ""]
     for idx, match in enumerate(matches, start=1):
         company = match.get("company", "Unknown")
         title = match.get("title", "Role")
         score = match.get("match_score", 0)
-        lines.append(f"{idx}. {company} — {title} — Match {score}%")
+        lines.append(f"{idx}. {title} @ {company} — {score}% match")
+        if match.get("posted_at"):
+            lines.append(f"   Posted: {match['posted_at'][:10]}")
         if match.get("apply_url"):
             lines.append(f"   Apply: {match['apply_url']}")
         pdf = match.get("generated_pdf_path")
         if pdf:
             lines.append(f"   Resume: {pdf}")
+        skills = match.get("matched_skills") or []
+        if skills:
+            lines.append(f"   Skills: {', '.join(skills[:5])}")
         lines.append("")
+    lines.append("— Sent by CareerPilot AI")
     return "\n".join(lines).strip()
 
 
