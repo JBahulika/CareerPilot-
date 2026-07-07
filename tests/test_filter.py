@@ -9,11 +9,11 @@ from models.schemas import JobListing, UserProfile
 
 def _mid_profile(**kwargs) -> UserProfile:
     base = dict(
-        skills=["python"],
+        skills=["python", "backend"],
         experience_level="3-5 years",
         target_years_min=3,
         target_years_max=5,
-        preferred_roles=["AI Engineer"],
+        preferred_roles=["Software Engineer"],
     )
     base.update(kwargs)
     return UserProfile(**base)
@@ -38,8 +38,11 @@ def test_dedup_removes_identical_jobs():
 
 
 def test_relevance_drops_unrelated_roles():
-    profile = _mid_profile()
-    jobs = [_job("AI Engineer", "python required"), _job("Truck Driver", "cdl license")]
+    profile = _mid_profile(preferred_roles=["AI Engineer"], skills=["python", "machine learning"])
+    jobs = [
+        _job("AI Engineer", "python ai machine learning required"),
+        _job("Truck Driver", "cdl license"),
+    ]
     kept = JobFilterAgent().run(jobs, profile)
     titles = [j.title for j in kept]
     assert "AI Engineer" in titles
