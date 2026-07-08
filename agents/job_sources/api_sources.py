@@ -202,28 +202,33 @@ class HimalayasSource:
 
     def fetch(self, profile, limit, *, allow_stretch=False, flex_years=None) -> list[JobListing]:
         try:
-            resp = requests.get(
+            resp = http_get(
                 "https://himalayas.app/jobs/api",
                 params={"limit": limit * 4},
-                timeout=30,
             )
-            resp.raise_for_status()
             raw = resp.json().get("jobs", [])
         except Exception as exc:  # noqa: BLE001
             logger.error(f"Himalayas failed: {exc}")
             return []
 
-        jobs = [
-            build_job(
-                source=self.name,
-                company=item.get("companyName", ""),
-                title=item.get("title", ""),
-                description=strip_html(item.get("description", "")),
-                skills=item.get("categories", []) or [],
-                location="Remote",
-                apply_url=item.get("applicationLink", "") or item.get("slug", ""),
-                posted_at=parse_posted_at(item.get("pubDate")),
+        jobs = []
+        for item in raw:
+            # Prefer the real application link; else resolve the slug to the
+            # canonical Himalayas posting page (a bare slug is not a URL).
+            apply_url = item.get("applicationLink", "") or item.get("slug", "")
+            jobs.append(
+                build_job(
+                    source=self.name,
+                    company=item.get("companyName", ""),
+                    title=item.get("title", ""),
+                    description=strip_html(item.get("description", "")),
+                    skills=item.get("categories", []) or [],
+                    location=item.get("locationRestrictions") or "Remote",
+                    salary=item.get("salaryRange", "") or "",
+                    apply_url=apply_url,
+                    apply_base="https://himalayas.app/jobs",
+                    remote=True,
+                    posted_at=parse_posted_at(item.get("pubDate")),
+                )
             )
-            for item in raw
-        ]
         return _finalize(jobs, profile, allow_stretch, flex_years, self.name)
