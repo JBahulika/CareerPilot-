@@ -175,7 +175,8 @@ class LinkedInSource:
                 title=card["title"],
                 description=card["description"],
                 location=card.get("location", ""),
-                apply_url=card["apply_url"] if card["apply_url"].startswith("http") else "",
+                apply_url=card["apply_url"],
+                apply_base="https://www.linkedin.com",
             )
             for card in cards
         ]
