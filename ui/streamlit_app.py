@@ -8,12 +8,25 @@ A thin client over the FastAPI backend. Run the API first, then:
 from __future__ import annotations
 
 import os
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
 import httpx
 import streamlit as st
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from models.schemas import UserProfile
+from services.job_fields import (
+    JOB_FIELD_OPTIONS,
+    effective_fields,
+    field_labels,
+    infer_fields_from_profile,
+)
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
@@ -47,6 +60,9 @@ _EXPERIENCE_YEAR_DEFAULTS = {
     "3-5 years": (3, 5),
     "5+ years": (5, 15),
 }
+
+_FIELD_IDS = [opt["id"] for opt in JOB_FIELD_OPTIONS]
+_FIELD_LABELS = {opt["id"]: opt["label"] for opt in JOB_FIELD_OPTIONS}
 
 
 def _api_reachable() -> bool:
@@ -139,7 +155,7 @@ def page_setup() -> None:
         else:
             st.warning(status.get("message"))
             st.code(
-                "ollama pull qwen2.5:7b\n"
+                "ollama pull qwen2.5:14b\n"
                 "# On Mac, open the Ollama app — no need to run ollama serve"
             )
     except Exception as exc:  # noqa: BLE001
@@ -183,6 +199,9 @@ def page_profile() -> None:
 
     st.write("**Skills:** " + (", ".join(profile.get("skills", [])) or "—"))
     st.write("**Preferred roles:** " + (", ".join(profile.get("preferred_roles", [])) or "—"))
+    profile_obj = UserProfile.model_validate(profile)
+    display_fields = field_labels(effective_fields(profile_obj))
+    st.write("**Job fields:** " + (", ".join(display_fields) or "—"))
 
     st.divider()
     st.subheader("Your search preferences")
@@ -217,6 +236,16 @@ def page_profile() -> None:
     st.caption(
         f"**{selected_level}** → target **{ymin}–{ymax} years**. "
         "Jobs outside this band are dropped unless stretch is enabled."
+    )
+
+    stored_fields = [f for f in profile.get("preferred_fields", []) if f in _FIELD_IDS]
+    default_fields = stored_fields or infer_fields_from_profile(profile_obj)
+    selected_fields = st.multiselect(
+        "Job fields",
+        options=_FIELD_IDS,
+        default=[f for f in default_fields if f in _FIELD_IDS],
+        format_func=lambda fid: _FIELD_LABELS[fid],
+        help="Pick one or more domains. Jobs matching ANY selected field are included.",
     )
 
     preferred_loc = st.text_input(
@@ -257,6 +286,7 @@ def page_profile() -> None:
         profile["experience_level"] = selected_level
         profile["target_years_min"] = int(ymin)
         profile["target_years_max"] = int(ymax)
+        profile["preferred_fields"] = selected_fields
         profile["preferred_location"] = preferred_loc.strip()
         profile["include_remote"] = include_remote
         profile["strict_experience"] = strict_experience
@@ -286,9 +316,11 @@ Settings come from your **Profile** (experience, location, strict/stretch rules)
 
     loc = profile.get("preferred_location") or profile.get("location") or "Any"
     remote = "yes" if profile.get("include_remote", True) else "no"
+    fields_text = ", ".join(field_labels(effective_fields(UserProfile.model_validate(profile))))
     st.info(
         f"Using profile: **{profile.get('experience_level')}** "
         f"({profile.get('target_years_min', 0)}–{profile.get('target_years_max', 1)} yrs) · "
+        f"fields: **{fields_text or '—'}** · "
         f"roles: {', '.join(profile.get('preferred_roles', [])[:3]) or profile.get('role', '—')} · "
         f"location: **{loc}** · remote: **{remote}** · "
         f"strict: **{'on' if profile.get('strict_experience', True) else 'off'}** · "

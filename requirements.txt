@@ -5,7 +5,7 @@
 #
 # ── System prerequisites (install separately, not via pip) ─────────────────
 #   Ollama (local LLM):  https://ollama.com
-#     ollama pull qwen2.5:7b
+#     ollama pull qwen2.5:14b
 #   Playwright Chromium (scraped job boards: Indeed, Naukri, LinkedIn, etc.):
 #     playwright install chromium
 #

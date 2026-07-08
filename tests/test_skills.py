@@ -36,6 +36,7 @@ def _aiml_profile() -> UserProfile:
             "Machine Learning",
         ],
         preferred_roles=["AI Engineer", "Machine Learning Engineer"],
+        preferred_fields=["aiml"],
     )
 
 

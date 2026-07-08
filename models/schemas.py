@@ -48,6 +48,7 @@ class UserProfile(BaseModel):
     experience: list[Experience] = Field(default_factory=list)
     certifications: list[str] = Field(default_factory=list)
     preferred_roles: list[str] = Field(default_factory=list)
+    preferred_fields: list[str] = Field(default_factory=list)
     preferred_location: str = ""
     include_remote: bool = True
     target_years_min: Optional[int] = None
@@ -75,6 +76,7 @@ class UserProfile(BaseModel):
             f"Target years: {self.target_years_min or 'auto'}-{self.target_years_max or 'auto'}",
             f"Skills: {', '.join(self.skills)}",
             f"Preferred roles: {', '.join(self.preferred_roles)}",
+            f"Preferred fields: {', '.join(self.preferred_fields)}",
             f"Location: {self.preferred_location or self.location}",
             f"Include remote: {self.include_remote}",
         ]

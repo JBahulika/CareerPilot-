@@ -33,7 +33,7 @@ def check_ollama_status(model: Optional[str] = None) -> tuple[bool, str]:
         )
 
     available = [m.get("name", "") for m in resp.json().get("models", [])]
-    # Model tags may be "qwen2.5:7b" or bare "qwen2.5"; match by prefix.
+    # Model tags may be "qwen2.5:14b" or bare "qwen2.5"; match by prefix.
     if any(name == model or name.startswith(model.split(":")[0]) for name in available):
         return True, f"Ollama ready with model '{model}'."
     return False, (

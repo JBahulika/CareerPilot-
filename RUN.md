@@ -7,7 +7,7 @@ cd /Users/bahulika/Documents/Projects_Stairway/P23_CAREERPILOT
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-ollama pull qwen2.5:7b
+ollama pull qwen2.5:14b
 ```
 
 ---

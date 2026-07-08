@@ -24,7 +24,7 @@ Each stage is a LangGraph node sharing one typed pipeline state. See
 | Backend | FastAPI |
 | Frontend | Streamlit |
 | Agents | LangGraph |
-| LLM | Ollama (e.g. `qwen2.5:7b`) |
+| LLM | Ollama (e.g. `qwen2.5:14b`) |
 | Embeddings | `BAAI/bge-small-en-v1.5` (sentence-transformers) |
 | Vector DB | ChromaDB |
 | Storage | SQLite (SQLModel) |
@@ -53,7 +53,7 @@ playwright install chromium
 
 ```bash
 ollama serve          # in one terminal
-ollama pull qwen2.5:7b
+ollama pull qwen2.5:14b
 ```
 
 4. Copy the environment template and adjust if needed:
@@ -86,7 +86,7 @@ Then in the dashboard:
 
 All settings live in `.env` (see [`.env.example`](.env.example)):
 
-- `OLLAMA_MODEL` — local model tag (default `qwen2.5:7b`).
+- `OLLAMA_MODEL` — local model tag (default `qwen2.5:14b`).
 - `JOB_SOURCE` — `all` (default, aggregates every source below) or a single site id.
 - `EXPERIENCE_FLEX_YEARS` — +/- years around your target range when matching jobs.
 - `DEFAULT_INCLUDE_REMOTE` — include remote jobs when filtering by location (default `true`).

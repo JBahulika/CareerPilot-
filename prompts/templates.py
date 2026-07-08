@@ -21,6 +21,7 @@ this schema:
   "experience": [{"title": string, "company": string, "duration": string, "description": string}],
   "certifications": [string],
   "preferred_roles": [string],   // infer 2-4 target roles from the resume
+  "preferred_fields": [string], // infer 1-3 job field ids from: aiml, data_science, backend, frontend, fullstack, devops, mobile, cloud, qa, software
   "preferred_location": string
 }
 
@@ -31,6 +32,7 @@ Rules:
 - If the resume lists no full-time work experience, experience_level must be "Fresher" or "0-1 years".
 - Count internships and academic projects toward skills, not toward years of professional experience.
 - Infer preferred_roles from the candidate's skills and experience.
+- Infer preferred_fields using only these ids: aiml, data_science, backend, frontend, fullstack, devops, mobile, cloud, qa, software.
 - Return JSON only, no commentary."""
 
 

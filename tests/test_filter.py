@@ -14,6 +14,7 @@ def _mid_profile(**kwargs) -> UserProfile:
         target_years_min=3,
         target_years_max=5,
         preferred_roles=["Software Engineer"],
+        preferred_fields=["software"],
     )
     base.update(kwargs)
     return UserProfile(**base)
@@ -38,7 +39,11 @@ def test_dedup_removes_identical_jobs():
 
 
 def test_relevance_drops_unrelated_roles():
-    profile = _mid_profile(preferred_roles=["AI Engineer"], skills=["python", "machine learning"])
+    profile = _mid_profile(
+        preferred_roles=["AI Engineer"],
+        skills=["python", "machine learning"],
+        preferred_fields=["aiml"],
+    )
     jobs = [
         _job("AI Engineer", "python ai machine learning required"),
         _job("Truck Driver", "cdl license"),
@@ -92,6 +97,7 @@ def test_fresher_profile_rejects_senior_jobs():
         target_years_max=1,
         skills=["python", "machine learning"],
         preferred_roles=["AI Engineer", "Machine Learning Engineer"],
+        preferred_fields=["aiml"],
     )
     jobs = [
         _job("Junior ML Engineer", "python ml ai entry level"),

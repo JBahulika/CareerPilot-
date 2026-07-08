@@ -24,12 +24,11 @@ from services.seniority import (
     infer_job_tier,
 )
 from services.skills import (
-    _aiml_hits,  # noqa: PLC2701 - internal reuse, single source of truth
-    _profile_is_aiml_focused,
     deterministic_skill_overlap,
     is_excluded_job_title,
     role_search_terms,
 )
+from services.job_fields import effective_fields, title_relevance_for_fields
 
 _W_TITLE = 35
 _W_SKILLS = 25
@@ -45,20 +44,15 @@ def _title_relevance(job: JobListing, profile: UserProfile) -> float:
         return 0.0
 
     score = 0.0
-    # Exact/!partial preferred-role phrase in the title is the best signal.
     for role in role_search_terms(profile):
         role_lower = role.lower().strip()
         if role_lower and role_lower in title:
             score = max(score, 1.0)
 
-    if _profile_is_aiml_focused(profile):
-        hits = _aiml_hits(job.title)
-        if hits >= 2:
-            score = max(score, 0.95)
-        elif hits == 1:
-            score = max(score, 0.8)
-    else:
-        # Non-AIML: reward generic tech-role words in the title.
+    fields = effective_fields(profile)
+    score = max(score, title_relevance_for_fields(job, fields))
+
+    if score == 0.0:
         for word in ("engineer", "developer", "scientist", "analyst", "architect"):
             if word in title:
                 score = max(score, 0.7)

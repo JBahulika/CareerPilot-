@@ -153,42 +153,9 @@ def role_search_terms(profile: UserProfile) -> list[str]:
 
 def search_queries(profile: UserProfile) -> list[str]:
     """Distinct search strings for job board APIs (most specific first)."""
-    from services.seniority import infer_candidate_tier
+    from services.job_fields import effective_fields, search_queries_for_fields
 
-    roles = role_search_terms(profile)
-    queries: list[str] = list(roles)
-
-    if _profile_is_aiml_focused(profile):
-        queries.extend(
-            [
-                "machine learning engineer",
-                "AI engineer",
-                "ML engineer",
-                "data scientist",
-                "deep learning engineer",
-                "NLP engineer",
-                "LLM engineer",
-            ]
-        )
-        tier = infer_candidate_tier(profile)
-        if tier <= 1:
-            queries.extend(
-                [
-                    "junior machine learning engineer",
-                    "graduate AI engineer",
-                    "entry level ML engineer",
-                ]
-            )
-
-    # Dedupe while preserving order
-    seen: set[str] = set()
-    out: list[str] = []
-    for q in queries:
-        key = q.lower().strip()
-        if key and key not in seen:
-            seen.add(key)
-            out.append(q.strip())
-    return out
+    return search_queries_for_fields(effective_fields(profile), profile)
 
 
 def _word_boundary_hit(term: str, haystack: str) -> bool:
@@ -240,56 +207,19 @@ def _profile_is_aiml_focused(profile: UserProfile) -> bool:
 
 def is_relevant_job_posting(job: JobListing, profile: UserProfile) -> bool:
     """Strict gate: is this job posting in the right domain for this profile?"""
-    title = (job.title or "").lower()
-    haystack = f"{job.title} {job.description} {' '.join(job.skills)}".lower()
-
     if is_excluded_job_title(job.title):
         return False
 
     if has_unrelated_enterprise_stack(job, profile):
         return False
 
-    if not _profile_is_aiml_focused(profile):
-        return role_relevant(job, profile)
+    from services.job_fields import effective_fields, job_matches_any_field
 
-    # --- AIML profile: title must signal AIML/ML, not just generic "engineer" ---
-    title = (job.title or "").lower()
-    haystack = f"{job.title} {job.description} {' '.join(job.skills)}".lower()
-
-    _NON_AIML_ENGINEERING = [
-        r"\bfrontend\b",
-        r"\bquality\s+engineer\b",
-        r"\bqa\s+engineer\b",
-        r"\bfull[\s-]?stack\b",
-        r"\brails\b",
-        r"\bdevops\b",
-        r"\bsre\b",
-        r"\bproduct\s+engineer\b",
-    ]
-    title_aiml_hits = _aiml_hits(job.title)
-    if title_aiml_hits == 0 and any(re.search(p, title) for p in _NON_AIML_ENGINEERING):
-        return False
-
-    has_tech_title = any(_word_boundary_hit(w, title) for w in _TECH_TITLE_WORDS)
-
-    # Strong pass: AIML in title + technical role
-    if title_aiml_hits >= 1 and has_tech_title:
+    fields = effective_fields(profile)
+    if job_matches_any_field(job, fields, profile):
         return True
 
-    # Preferred role phrase in title
-    for role in role_search_terms(profile):
-        role_lower = role.lower()
-        if len(role_lower) > 5 and role_lower in title:
-            return True
-        role_tokens = [t for t in _tokens(role) if len(t) >= 2]
-        if len(role_tokens) >= 2 and all(_word_boundary_hit(t, title) for t in role_tokens[:3]):
-            return True
-
-    # Junior/graduate ML titles without explicit "AI" still OK if ML in title
-    if _word_boundary_hit("ml", title) or "machine learning" in title:
-        return has_tech_title
-
-    return False
+    return role_relevant(job, profile)
 
 
 def matches_scrape_keywords(job: JobListing, profile: UserProfile) -> bool:
@@ -331,21 +261,15 @@ def role_relevant(job: JobListing, profile: UserProfile) -> bool:
         if len(token) >= 2
     )
     if role_hit:
-        if _profile_is_aiml_focused(profile):
-            return _aiml_hits(haystack) >= 1
         return True
 
     profile_role_text = " ".join(roles).lower()
     if any(w in haystack for w in _TECH_ROLE_WORDS) and any(
         w in profile_role_text for w in _TECH_ROLE_WORDS
     ):
-        if _profile_is_aiml_focused(profile):
-            return _aiml_hits(haystack) >= 1
         return True
 
     if skill_hits_in_text(profile, haystack) >= 2:
-        if _profile_is_aiml_focused(profile):
-            return _aiml_hits(haystack) >= 1
         return True
 
     return False
