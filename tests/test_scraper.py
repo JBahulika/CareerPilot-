@@ -21,7 +21,8 @@ def test_content_hash_differs_for_different_jobs():
 
 
 def test_strip_html_removes_tags():
-    assert _strip_html("<p>Hello <b>world</b></p>") == "Hello  world"
+    # Tags are removed and runs of whitespace are collapsed to single spaces.
+    assert _strip_html("<p>Hello <b>world</b></p>") == "Hello world"
 
 
 def test_remotive_parses_fixture(monkeypatch):
