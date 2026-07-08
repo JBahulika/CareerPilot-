@@ -171,6 +171,7 @@ class SemanticMatcherAgent:
         candidate_tier: int,
         allow_stretch: bool = False,
         flex_years: int | None = None,
+        relaxed: bool = False,
     ) -> MatchResult:
         detail = compatibility_detail(
             job, profile, allow_stretch=allow_stretch, flex_years=flex_years
