@@ -100,14 +100,27 @@ class JobListing(BaseModel):
     content_hash: str = ""
     posted_at: Optional[datetime] = None
     scraped_at: datetime = Field(default_factory=datetime.utcnow)
+    # Enrichment used to improve matching accuracy (not persisted).
+    job_type: str = ""  # e.g. "full-time", "contract", "part-time"
+    remote: bool = False
+    relevance_score: int = 0  # 0-100 scrape-time fit score, used for ranking
 
     def match_text(self) -> str:
         """Text used for embedding and LLM matching."""
         seniority = self.experience or "Not specified"
+        extras = []
+        if self.job_type:
+            extras.append(f"Employment type: {self.job_type}")
+        if self.remote:
+            extras.append("Remote: yes")
+        if self.salary:
+            extras.append(f"Salary: {self.salary}")
+        extra_block = ("\n".join(extras) + "\n") if extras else ""
         return (
             f"{self.title} at {self.company}\n"
             f"Seniority: {seniority}\n"
             f"Location: {self.location}\n"
+            f"{extra_block}"
             f"Skills: {', '.join(self.skills)}\n"
             f"{self.description}"
         )
