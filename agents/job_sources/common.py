@@ -189,14 +189,32 @@ def annotate_and_filter_jobs(
 def prepare_scraped_jobs(
     jobs: list[JobListing], profile: UserProfile | None = None
 ) -> list[JobListing]:
-    """Label seniority, apply domain relevance, then recency sort."""
+    """Label seniority, apply domain relevance, then rank by fit + recency.
+
+    When a profile is given, each job gets a deterministic ``relevance_score``
+    and the list is returned best-first so the matcher sees the strongest
+    candidates first. Recency filtering still applies.
+    """
     from services.skills import is_relevant_job_posting
 
     for job in jobs:
         job.experience = experience_label_for_job(job)
-    if profile is not None:
-        jobs = [j for j in jobs if is_relevant_job_posting(j, profile)]
-    return sort_and_filter_recent(jobs)
+
+    if profile is None:
+        return sort_and_filter_recent(jobs)
+
+    jobs = [j for j in jobs if is_relevant_job_posting(j, profile)]
+    jobs = sort_and_filter_recent(jobs)
+
+    from services.scoring import relevance_score
+
+    for job in jobs:
+        job.relevance_score = relevance_score(job, profile)
+    jobs.sort(
+        key=lambda j: (j.relevance_score, j.posted_at or j.scraped_at or datetime.min),
+        reverse=True,
+    )
+    return jobs
 
 
 def build_job(
@@ -210,17 +228,27 @@ def build_job(
     salary: str = "",
     apply_url: str = "",
     posted_at: datetime | None = None,
+    job_type: str = "",
+    remote: bool | None = None,
+    apply_base: str = "",
 ) -> JobListing:
     now = datetime.utcnow()
+    company = (company or "").strip()
+    title = (title or "").strip()
+    is_remote = remote if remote is not None else is_remote_location(location)
     return JobListing(
         source=source,
         company=company,
         title=title,
         description=description,
-        skills=skills or [],
-        location=location,
-        salary=salary,
-        apply_url=apply_url,
+        skills=[s.strip() for s in (skills or []) if s and s.strip()],
+        location=location.strip(),
+        salary=str(salary or "").strip(),
+        apply_url=ensure_apply_url(
+            apply_url, base=apply_base, company=company, title=title
+        ),
+        job_type=(job_type or "").strip(),
+        remote=is_remote,
         content_hash=content_hash(company, title, description),
         posted_at=posted_at or now,
         scraped_at=now,
