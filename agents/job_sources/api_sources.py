@@ -80,12 +80,7 @@ class RemoteOKSource:
 
     def fetch(self, profile, limit, *, allow_stretch=False, flex_years=None) -> list[JobListing]:
         try:
-            resp = requests.get(
-                "https://remoteok.com/api",
-                headers={"User-Agent": "CareerPilot/1.0"},
-                timeout=30,
-            )
-            resp.raise_for_status()
+            resp = http_get("https://remoteok.com/api")
             raw = resp.json()
             if raw and isinstance(raw[0], str):
                 raw = raw[1:]
@@ -99,6 +94,13 @@ class RemoteOKSource:
                 continue
             title = item.get("position") or item.get("title") or ""
             desc = strip_html(item.get("description", ""))
+            salary_min = item.get("salary_min")
+            salary_max = item.get("salary_max")
+            salary = ""
+            if salary_min and salary_max:
+                salary = f"${salary_min:,} - ${salary_max:,}"
+            elif salary_min:
+                salary = f"${salary_min:,}+"
             job = build_job(
                 source=self.name,
                 company=item.get("company", ""),
@@ -106,8 +108,10 @@ class RemoteOKSource:
                 description=desc,
                 skills=[t.strip() for t in (item.get("tags") or []) if t],
                 location=item.get("location", "Remote"),
-                salary=str(item.get("salary_min", "") or ""),
+                salary=salary,
                 apply_url=item.get("url") or item.get("apply_url", ""),
+                apply_base="https://remoteok.com",
+                remote=True,
                 posted_at=parse_posted_at(item.get("date") or item.get("epoch")),
             )
             jobs.append(job)
