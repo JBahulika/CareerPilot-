@@ -78,9 +78,6 @@ class WellfoundSource:
         now = datetime.utcnow()
         jobs = []
         for card in cards:
-            apply_url = card["apply_url"]
-            if apply_url.startswith("/"):
-                apply_url = f"https://wellfound.com{apply_url}"
             jobs.append(
                 build_job(
                     source=self.name,
@@ -88,7 +85,8 @@ class WellfoundSource:
                     title=card["title"],
                     description=card["description"],
                     location=card.get("location", ""),
-                    apply_url=apply_url,
+                    apply_url=card["apply_url"],
+                    apply_base="https://wellfound.com",
                     posted_at=now,
                 )
             )
