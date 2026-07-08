@@ -146,7 +146,8 @@ class NaukriSource:
                 title=card["title"],
                 description=card["description"],
                 location=card.get("location") or (loc or "India"),
-                apply_url=card["apply_url"] if card["apply_url"].startswith("http") else f"https://www.naukri.com{card['apply_url']}",
+                apply_url=card["apply_url"],
+                apply_base="https://www.naukri.com",
             )
             for card in cards
         ]
