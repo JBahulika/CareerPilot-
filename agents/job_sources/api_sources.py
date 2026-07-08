@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import requests
-
 from agents.job_sources.common import (
     build_job,
+    http_get,
     parse_posted_at,
     prepare_scraped_jobs,
     search_queries,
@@ -15,6 +14,13 @@ from core.logging import get_logger
 from models.schemas import JobListing, UserProfile
 
 logger = get_logger(__name__)
+
+
+def _as_type(value) -> str:
+    """Normalize a job-type value that may be a str or list into a label."""
+    if isinstance(value, (list, tuple)):
+        return ", ".join(str(v).replace("_", " ").strip() for v in value if v)
+    return str(value or "").replace("_", " ").strip()
 
 
 def _finalize(jobs, profile, allow_stretch, flex_years, source_name) -> list[JobListing]:
