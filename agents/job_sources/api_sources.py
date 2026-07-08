@@ -223,7 +223,7 @@ class HimalayasSource:
                     title=item.get("title", ""),
                     description=strip_html(item.get("description", "")),
                     skills=item.get("categories", []) or [],
-                    location=item.get("locationRestrictions") or "Remote",
+                    location="Remote",
                     salary=item.get("salaryRange", "") or "",
                     apply_url=apply_url,
                     apply_base="https://himalayas.app/jobs",
