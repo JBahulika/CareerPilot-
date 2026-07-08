@@ -114,9 +114,8 @@ class IndeedSource:
                 title=card["title"],
                 description=card["description"],
                 location=card.get("location", ""),
-                apply_url=f"https://www.indeed.com{card['apply_url']}"
-                if card["apply_url"].startswith("/")
-                else card["apply_url"],
+                apply_url=card["apply_url"],
+                apply_base="https://www.indeed.com",
             )
             for card in cards
         ]
