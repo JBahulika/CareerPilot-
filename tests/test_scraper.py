@@ -48,7 +48,7 @@ def test_remotive_parses_fixture(monkeypatch):
             return fixture
 
     monkeypatch.setattr(
-        "agents.job_sources.api_sources.requests.get", lambda *a, **k: _Resp()
+        "agents.job_sources.api_sources.http_get", lambda *a, **k: _Resp()
     )
 
     jobs = RemotiveSource().fetch(
