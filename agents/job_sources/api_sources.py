@@ -125,11 +125,7 @@ class ArbeitnowSource:
 
     def fetch(self, profile, limit, *, allow_stretch=False, flex_years=None) -> list[JobListing]:
         try:
-            resp = requests.get(
-                "https://www.arbeitnow.com/api/job-board-api",
-                timeout=30,
-            )
-            resp.raise_for_status()
+            resp = http_get("https://www.arbeitnow.com/api/job-board-api")
             raw = resp.json().get("data", [])
         except Exception as exc:  # noqa: BLE001
             logger.error(f"Arbeitnow failed: {exc}")
@@ -146,6 +142,9 @@ class ArbeitnowSource:
                     skills=item.get("tags", []) or [],
                     location=item.get("location", ""),
                     apply_url=item.get("url", ""),
+                    apply_base="https://www.arbeitnow.com",
+                    job_type=_as_type(item.get("job_types")),
+                    remote=bool(item.get("remote")),
                     posted_at=parse_posted_at(item.get("created_at")),
                 )
             )
