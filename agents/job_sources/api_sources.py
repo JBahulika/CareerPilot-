@@ -41,12 +41,10 @@ class RemotiveSource:
             if len(jobs) >= limit:
                 break
             try:
-                resp = requests.get(
+                resp = http_get(
                     "https://remotive.com/api/remote-jobs",
                     params={"search": query, "limit": per_query},
-                    timeout=30,
                 )
-                resp.raise_for_status()
                 raw = resp.json().get("jobs", [])
             except Exception as exc:  # noqa: BLE001
                 logger.error(f"Remotive search '{query}' failed: {exc}")
@@ -62,6 +60,9 @@ class RemotiveSource:
                     location=item.get("candidate_required_location", "Remote"),
                     salary=item.get("salary", "") or "",
                     apply_url=item.get("url", ""),
+                    apply_base="https://remotive.com",
+                    job_type=_as_type(item.get("job_type")),
+                    remote=True,
                     posted_at=parse_posted_at(item.get("publication_date")),
                 )
                 if job.content_hash in seen:
