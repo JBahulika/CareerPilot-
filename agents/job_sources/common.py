@@ -5,16 +5,49 @@ from __future__ import annotations
 import hashlib
 import re
 from datetime import datetime, timedelta
+from urllib.parse import quote_plus, urlparse
+
+import requests
 
 from core.config import settings
+from core.logging import get_logger
 from models.schemas import JobListing, UserProfile
+from services.location import (
+    effective_location,
+    is_remote_location,
+    location_filter_ok,
+)
 from services.seniority import (
     experience_label_for_job,
     is_job_compatible_with_profile,
 )
-from services.location import effective_location, location_filter_ok
+
+logger = get_logger(__name__)
 
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
+_WHITESPACE_RE = re.compile(r"\s+")
+
+# One pooled session for all API adapters — reuses TCP connections and applies
+# a consistent, polite User-Agent. Much faster than a fresh connection per call.
+_SESSION = requests.Session()
+_SESSION.headers.update(
+    {
+        "User-Agent": (
+            "CareerPilot/1.0 (+https://github.com/JBahulika/CareerPilot-)"
+        ),
+        "Accept": "application/json",
+    }
+)
+
+_DEFAULT_TIMEOUT = 30
+
+
+def http_get(url: str, *, params: dict | None = None, timeout: int = _DEFAULT_TIMEOUT,
+             headers: dict | None = None) -> requests.Response:
+    """Shared GET with pooled connections and sane defaults."""
+    resp = _SESSION.get(url, params=params, timeout=timeout, headers=headers)
+    resp.raise_for_status()
+    return resp
 
 
 def content_hash(company: str, title: str, description: str) -> str:
@@ -23,7 +56,57 @@ def content_hash(company: str, title: str, description: str) -> str:
 
 
 def strip_html(text: str) -> str:
-    return _HTML_TAG_RE.sub(" ", text or "").replace("&nbsp;", " ").strip()
+    cleaned = _HTML_TAG_RE.sub(" ", text or "").replace("&nbsp;", " ")
+    return _WHITESPACE_RE.sub(" ", cleaned).strip()
+
+
+def _is_valid_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+        return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+    except ValueError:
+        return False
+
+
+def normalize_apply_url(url: str, *, base: str = "") -> str:
+    """Return an absolute http(s) URL, or "" when one cannot be built.
+
+    Handles absolute URLs, root-relative paths, and bare slugs (joined onto the
+    source's base URL). Anything that cannot be resolved returns "".
+    """
+    url = (url or "").strip()
+    if not url:
+        return ""
+    if _is_valid_url(url):
+        return url
+    base = (base or "").rstrip("/")
+    if not base:
+        return ""
+    if url.startswith("/"):
+        candidate = f"{base}{url}"
+    else:
+        candidate = f"{base}/{url.lstrip('/')}"
+    return candidate if _is_valid_url(candidate) else ""
+
+
+def search_fallback_url(company: str, title: str) -> str:
+    """A guaranteed link so the user can always reach the posting.
+
+    Used when a source does not expose a usable apply URL. Points at a Google
+    search scoped to the exact role + company.
+    """
+    query = " ".join(p for p in (title, company, "job apply") if p).strip()
+    if not query:
+        return ""
+    return f"https://www.google.com/search?q={quote_plus(query)}"
+
+
+def ensure_apply_url(url: str, *, base: str, company: str, title: str) -> str:
+    """Normalize the URL, falling back to a scoped search when none is usable."""
+    normalized = normalize_apply_url(url, base=base)
+    if normalized:
+        return normalized
+    return search_fallback_url(company, title)
 
 
 def parse_posted_at(value: str | None) -> datetime | None:
