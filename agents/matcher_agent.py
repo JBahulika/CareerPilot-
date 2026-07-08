@@ -123,6 +123,7 @@ class SemanticMatcherAgent:
             pool,
             key=lambda j: (
                 similarity.get(j.content_hash, 0.0),
+                j.relevance_score,
                 (j.posted_at or j.scraped_at or datetime.min),
             ),
             reverse=True,
