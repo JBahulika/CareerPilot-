@@ -69,16 +69,23 @@ class SemanticMatcherAgent:
             return []
 
         candidate_tier = infer_candidate_tier(profile)
-        eligible = [
+
+        relevant = [
             job
             for job in jobs
             if is_relevant_job_posting(job, profile)
             and not has_unrelated_enterprise_stack(job, profile)
         ]
+
+        # Progressive relaxation: never leave the user with an empty page.
+        # 1) strict (relevance + experience band) -> 2) relevance only ->
+        # 3) any scraped job. Relaxed pools are ranked and clearly labelled.
+        relaxed = False
+        pool = relevant
         if strict_experience:
-            eligible = [
+            strict_pool = [
                 job
-                for job in eligible
+                for job in relevant
                 if is_job_compatible_with_profile(
                     job,
                     profile,
@@ -86,20 +93,34 @@ class SemanticMatcherAgent:
                     flex_years=flex_years,
                 )
             ]
+            if strict_pool:
+                pool = strict_pool
+            elif relevant:
+                pool = relevant
+                relaxed = True
+                logger.info(
+                    "Matcher: no jobs inside experience band — relaxing seniority "
+                    "to surface the closest roles"
+                )
+
+        if not pool:
+            pool = jobs
+            relaxed = True
+            logger.info(
+                "Matcher: no domain-relevant jobs — falling back to all scraped jobs"
+            )
+
         logger.info(
-            f"Matcher: {len(jobs)} -> {len(eligible)} jobs after relevance + seniority pre-filter"
+            f"Matcher: {len(jobs)} -> {len(pool)} candidate jobs (relaxed={relaxed})"
         )
 
-        if not eligible:
-            return []
-
-        index_jobs(eligible)
+        index_jobs(pool)
         similarity = rank_by_similarity(
-            profile.summary_text(), [j.content_hash for j in eligible]
+            profile.summary_text(), [j.content_hash for j in pool]
         )
 
         ranked = sorted(
-            eligible,
+            pool,
             key=lambda j: (
                 similarity.get(j.content_hash, 0.0),
                 (j.posted_at or j.scraped_at or datetime.min),
@@ -120,19 +141,24 @@ class SemanticMatcherAgent:
                 candidate_tier=candidate_tier,
                 allow_stretch=allow_stretch,
                 flex_years=flex_years,
+                relaxed=relaxed,
             )
             results.append(match)
 
-        results = [
+        def _rank_key(m: MatchResult):
+            return (m.match_score, m.job.posted_at or m.job.scraped_at or datetime.min)
+
+        quality = [
             m
             for m in results
             if m.recommendation != Recommendation.SKIP and m.match_score >= 35
         ]
+        if quality:
+            quality.sort(key=_rank_key, reverse=True)
+            return quality[:top_n]
 
-        results.sort(
-            key=lambda m: (m.match_score, m.job.posted_at or m.job.scraped_at or datetime.min),
-            reverse=True,
-        )
+        # Best-effort: surface the closest jobs rather than returning nothing.
+        results.sort(key=_rank_key, reverse=True)
         return results[:top_n]
 
     def _score_job(
