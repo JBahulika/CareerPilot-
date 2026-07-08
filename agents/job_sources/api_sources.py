@@ -163,28 +163,33 @@ class JobicySource:
 
         for tag in tags:
             try:
-                resp = requests.get(
+                resp = http_get(
                     "https://jobicy.com/api/v2/remote-jobs",
                     params={"count": per_tag, "tag": tag},
-                    timeout=30,
                 )
-                resp.raise_for_status()
                 raw = resp.json().get("jobs", [])
             except Exception as exc:  # noqa: BLE001
                 logger.error(f"Jobicy tag '{tag}' failed: {exc}")
                 continue
 
             for item in raw:
+                industry = item.get("jobIndustry")
+                skills = industry if isinstance(industry, list) else (
+                    [industry] if industry else []
+                )
                 jobs.append(
                     build_job(
                         source=self.name,
                         company=item.get("companyName", ""),
                         title=item.get("jobTitle", ""),
                         description=strip_html(item.get("jobDescription", "")),
-                        skills=[item.get("jobIndustry", "")] if item.get("jobIndustry") else [],
+                        skills=skills,
                         location=item.get("jobGeo", "Remote"),
                         salary=item.get("annualSalaryMin", "") or "",
                         apply_url=item.get("url", ""),
+                        apply_base="https://jobicy.com",
+                        job_type=_as_type(item.get("jobType")),
+                        remote=True,
                         posted_at=parse_posted_at(item.get("pubDate")),
                     )
                 )
