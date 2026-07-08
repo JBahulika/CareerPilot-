@@ -202,23 +202,40 @@ class SemanticMatcherAgent:
         combined = max(0, min(100, combined))
 
         if skill_score < 15 and not matched:
-            combined = min(combined, 35)
-            recommendation = Recommendation.SKIP
-            reasons = list(reasons) + [
-                "Low skill overlap with your profile — role may be unrelated."
-            ]
+            if relaxed:
+                combined = max(0, combined - 15)
+                reasons = list(reasons) + [
+                    "Limited skill overlap — shown because no closer roles were found."
+                ]
+            else:
+                combined = min(combined, 35)
+                recommendation = Recommendation.SKIP
+                reasons = list(reasons) + [
+                    "Low skill overlap with your profile — role may be unrelated."
+                ]
 
         if not level_ok:
-            combined = min(combined, 20)
-            recommendation = Recommendation.SKIP
-            reasons = list(reasons) + [
-                (
-                    f"Experience mismatch: you are {detail['candidate_label']} "
-                    f"(target {detail['target_years']} yrs) but this job is "
-                    f"{detail['job_label']} "
-                    f"({detail['job_required_years']}+ yrs required)."
-                )
-            ]
+            mismatch_reason = (
+                f"Experience mismatch: you are {detail['candidate_label']} "
+                f"(target {detail['target_years']} yrs) but this job is "
+                f"{detail['job_label']} "
+                f"({detail['job_required_years']}+ yrs required)."
+            )
+            if relaxed:
+                # Keep the job visible as a stretch/reach rather than hiding it.
+                combined = max(0, combined - 20)
+                reasons = list(reasons) + [
+                    "Stretch role (asks for more experience than your target): "
+                    + mismatch_reason
+                ]
+            else:
+                combined = min(combined, 20)
+                recommendation = Recommendation.SKIP
+                reasons = list(reasons) + [mismatch_reason]
+
+        # In relaxed mode we never hard-skip: these are the closest available jobs.
+        if relaxed and recommendation == Recommendation.SKIP:
+            recommendation = Recommendation.CONSIDER
 
         return MatchResult(
             job=job,
