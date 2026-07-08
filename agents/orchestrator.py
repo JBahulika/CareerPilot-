@@ -115,10 +115,13 @@ def _filter_node(state: PipelineState) -> PipelineState:
 def _match_node(state: PipelineState) -> PipelineState:
     update_run(state["run_id"], current_step="match")
     profile = _resolve_profile(state)
+    # If strict filtering removed everything, let the matcher relax over the raw
+    # scraped jobs so the user still sees the closest roles instead of nothing.
+    jobs_for_match = state.get("filtered_jobs") or state.get("jobs", [])
     try:
         matches = _matcher.run(
             profile,
-            state.get("filtered_jobs", []),
+            jobs_for_match,
             top_n=state.get("top_n", settings.top_n_jobs),
             strict_experience=state.get("strict_experience", True),
             allow_stretch=state.get("allow_stretch", False),
