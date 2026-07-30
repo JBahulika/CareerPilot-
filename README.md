@@ -1,170 +1,120 @@
 # CareerPilot AI
 
-An autonomous, **local-first** AI assistant that discovers relevant jobs, scores
-them against your resume, and generates ATS-friendly tailored resumes — all on
-your machine. Built as a multi-agent pipeline (LangGraph) over a local LLM
-(Ollama), with a FastAPI backend and a Streamlit dashboard.
+**Local-first multi-agent system for job discovery and resume tailoring.**
 
-Your resume never leaves your machine: parsing, matching, and generation all run
-locally.
+CareerPilot scrapes live job listings, filters them by experience and skills, ranks matches with semantic embeddings, and generates ATS-friendly tailored resumes as PDFs — entirely on the user’s machine. Resumes never leave the device; parsing, matching, and generation all run locally through Ollama.
 
-## Pipeline
+Built as a portfolio project demonstrating agent orchestration, local LLM integration, retrieval/ranking, and a full-stack Python application.
+
+---
+
+## What it does
+
+1. **Parse** a master resume PDF into a structured profile  
+2. **Scrape** jobs from multiple boards (API + browser automation)  
+3. **Filter** by experience tier, skills, location, and recency  
+4. **Rank** candidates with embeddings (BGE + ChromaDB)  
+5. **Tailor** the resume per job via a local LLM, with truthfulness guardrails  
+6. **Export** ATS-friendly single-column PDFs  
+
+Optional **daily 9 AM scan** re-runs the pipeline on fresh postings and writes a digest (local file or WhatsApp when configured).
 
 ```
-Resume PDF -> Parse -> Scrape jobs -> Filter -> Semantic match -> Tailor resume -> PDF
+Resume PDF → Parse → Scrape → Filter → Semantic match → Tailor → PDF
 ```
 
-Each stage is a LangGraph node sharing one typed pipeline state. See
-[`agents/orchestrator.py`](agents/orchestrator.py).
+Orchestration is a LangGraph state machine (`agents/orchestrator.py`) with live progress reported to the API and Streamlit UI.
+
+---
 
 ## Tech stack
 
-| Layer | Choice |
-|-------|--------|
+| Layer | Technology |
+|-------|------------|
 | Backend | FastAPI |
 | Frontend | Streamlit |
-| Agents | LangGraph |
-| LLM | Ollama (e.g. `qwen2.5:14b`) |
+| Agent orchestration | LangGraph |
+| Local LLM | Ollama (`qwen2.5:14b`) |
 | Embeddings | `BAAI/bge-small-en-v1.5` (sentence-transformers) |
-| Vector DB | ChromaDB |
-| Storage | SQLite (SQLModel) |
-| Resume parsing | PyMuPDF |
-| PDF generation | PyMuPDF |
-| Scraping | Remotive API (default), Wellfound (Playwright) |
+| Vector store | ChromaDB |
+| Database | SQLite + SQLModel |
+| PDF parse / generate | PyMuPDF |
+| Job sources | Remotive, RemoteOK, Arbeitnow, Jobicy, Himalayas (API); Wellfound, Indeed, Naukri, LinkedIn, Glassdoor (Playwright) |
 | Logging | Loguru |
 
-## Setup
+---
 
-1. Create a virtual environment and install dependencies:
+## Architecture highlights
+
+- **Multi-agent pipeline** — dedicated agents for scraping, filtering, matching, tailoring, and PDF generation, coordinated by a shared typed state graph  
+- **Privacy by design** — local LLM, local embeddings, local SQLite/Chroma; no cloud resume upload  
+- **Experience-aware matching** — strict seniority tiers, optional stretch roles, and configurable year flexibility  
+- **Truthfulness guardrails** — tailored resumes may only rephrase facts present in the source profile  
+- **Aggregated job sources** — one run can query all boards or a single source  
+- **Background daily scan** — APScheduler cron for morning digests  
+
+---
+
+## Quick start
+
+**Prerequisites:** Python 3.11+, [Ollama](https://ollama.com), and (for scrape sources) Playwright Chromium.
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-2. Install the Playwright browser (only needed for the Wellfound source):
-
-```bash
-playwright install chromium
-```
-
-3. Install and start [Ollama](https://ollama.com), then pull a model:
-
-```bash
-ollama serve          # in one terminal
-ollama pull qwen2.5:14b
-```
-
-4. Copy the environment template and adjust if needed:
-
-```bash
+playwright install chromium   # optional; needed for scrape-based boards
 cp .env.example .env
+
+ollama pull qwen2.5:14b       # Ollama app or `ollama serve` must be running
 ```
-
-## Run
-
-Start the backend and the UI in two terminals:
 
 ```bash
 # Terminal 1 — API
 uvicorn main:app --reload
 
-# Terminal 2 — Streamlit dashboard
+# Terminal 2 — dashboard
 streamlit run ui/streamlit_app.py
 ```
 
-Then in the dashboard:
+Open **http://localhost:8501** → Setup → Profile (upload resume) → Run Pipeline → Results.
 
-1. **Setup** — confirm the API and Ollama are ready.
-2. **Profile** — upload your resume PDF; review the parsed profile.
-3. **Run Pipeline** — pick a source and top-N, then run.
-4. **Results** — browse ranked matches and download tailored resumes.
-5. **History** — see past runs.
+---
 
 ## Configuration
 
-All settings live in `.env` (see [`.env.example`](.env.example)):
+Settings are loaded from `.env` (see `.env.example`):
 
-- `OLLAMA_MODEL` — local model tag (default `qwen2.5:14b`).
-- `JOB_SOURCE` — `all` (default, aggregates every source below) or a single site id.
-- `EXPERIENCE_FLEX_YEARS` — +/- years around your target range when matching jobs.
-- `DEFAULT_INCLUDE_REMOTE` — include remote jobs when filtering by location (default `true`).
-- `TOP_N_JOBS` — number of jobs to tailor resumes for.
-- `EMBEDDING_MODEL`, `CHROMA_PATH`, `DATABASE_URL`.
+| Variable | Purpose |
+|----------|---------|
+| `OLLAMA_MODEL` | Local model tag (default `qwen2.5:14b`) |
+| `JOB_SOURCE` | `all` or a single source id (`remotive`, `naukri`, …) |
+| `TOP_N_JOBS` | How many matches get tailored resumes |
+| `RECENT_JOBS_DAYS` / `DAILY_RECENT_JOBS_DAYS` | Recency windows for manual vs morning runs |
+| `EXPERIENCE_FLEX_YEARS` | ± years around the profile’s target range |
+| `DAILY_SCAN_ENABLED` | Morning pipeline cron (default on) |
+| `NOTIFIER_BACKEND` | `local` or `whatsapp` |
 
-### Job sources
+Profile preferences (experience level, fields, location, strict/stretch rules) are set once in the UI and reused by every run and the daily scan.
 
-CareerPilot scrapes these popular job boards (API where available, Playwright otherwise):
+---
 
-| Site | Method | Region |
-|------|--------|--------|
-| Remotive | API | Global |
-| RemoteOK | API | Global |
-| Arbeitnow | API | Global |
-| Jobicy | API | Global |
-| Himalayas | API | Global |
-| Wellfound (AngelList) | Scrape | Global |
-| Indeed | Scrape | Global |
-| Naukri | Scrape | India |
-| LinkedIn | Scrape | Global |
-| Glassdoor | Scrape | Global |
-
-Set `JOB_SOURCE=all` to query every source in one run, or pick a single id (e.g. `remotive`, `naukri`). Scraped sites may return fewer results when a board blocks automation.
-
-### Experience matching
-
-On **Profile**, set experience level and target year range once. These drive all filtering:
-
-| Setting | What it does |
-|---------|----------------|
-| **Strict experience** | Blocks senior/lead roles for 0–1 year profiles (recommended) |
-| **Stretch roles** | Allows jobs one tier above you (e.g. mid-level when junior). Off by default |
-| **Year flexibility** | +/- years around your target range. Use 0–1 for tight matching |
-
-Senior roles were slipping through because compatibility used loose OR logic and wide defaults. This is now **tier AND years** with tighter bands.
-
-### Location
-
-Set **preferred location** on Profile (city-level, e.g. Bangalore). Remote jobs included by default. Run Pipeline can override location or recency for a single run.
-
-### Morning scan (9 AM)
-
-When the API is running, a daily scan at **9:00 AM** scrapes jobs from the **last 2 days**, runs the pipeline, generates tailored PDFs, and writes a digest to `logs/notifications/`. WhatsApp delivery uses the same digest when configured.
-
-```env
-DAILY_SCAN_HOUR=9
-DAILY_RECENT_JOBS_DAYS=2
-RECENT_JOBS_DAYS=3
-```
-
-## Project layout
+## Project structure
 
 ```
-agents/       # parser, scraper, filter, matcher, resume tailor, pdf, orchestrator
-api/routes/   # resume, jobs, pipeline endpoints
-core/         # config (Pydantic Settings) + logging (Loguru)
-database/     # SQLModel tables, session, repositories
-models/       # Pydantic schemas shared across layers
-prompts/      # versioned LLM prompt templates
-services/     # embeddings, ChromaDB vector store, daily scheduler
-ui/           # Streamlit dashboard
-tests/        # unit + fixture-based tests
-main.py       # FastAPI entry point
+agents/          # Scraper, filter, matcher, tailor, PDF, orchestrator, job sources
+api/routes/      # Resume, jobs, pipeline HTTP endpoints
+core/            # Settings (Pydantic) and logging
+database/        # SQLModel models, session, repositories
+models/          # Shared Pydantic schemas
+prompts/         # Versioned LLM prompt templates
+services/        # Embeddings, vector store, scoring, scheduler, notifier
+ui/              # Streamlit dashboard
+tests/           # Unit and fixture-based tests
+main.py          # FastAPI entry point
 ```
 
-## Git auto-commit (gitwatch)
-
-Optional: auto-commit on save while developing.
-
-```bash
-brew install gitwatch          # once
-./scripts/setup-git-hooks.sh # strips Cursor co-author from commits
-./scripts/start-gitwatch.sh  # watch + commit locally
-./scripts/start-gitwatch.sh --push  # commit + push to origin
-```
-
-Commit messages list changed files (via `scripts/gitwatch-commit-msg.sh`).
+---
 
 ## Tests
 
@@ -172,46 +122,21 @@ Commit messages list changed files (via `scripts/gitwatch-commit-msg.sh`).
 pytest
 ```
 
-## Autonomous daily scan
+---
 
-When `DAILY_SCAN_ENABLED=true` (default), the API runs a **9 AM** cron job that:
+## Demo flow (for reviewers)
 
-1. Scrapes jobs posted in the last **2 days** (`DAILY_RECENT_JOBS_DAYS`)
-2. Runs the full pipeline using your saved Profile preferences
-3. Generates tailored PDFs for top matches
-4. Sends a digest to `logs/notifications/` or **WhatsApp** when configured
+1. Confirm API + Ollama healthy on the **Setup** page  
+2. Upload a resume on **Profile**; set experience, fields, and location  
+3. **Run Pipeline** with Top N (3–5 is enough for a quick demo; each tailored PDF uses a local LLM call)  
+4. Open **Results** to view match scores, reasons, apply links, and download PDFs  
+5. **History** lists past runs with scrape / match / PDF counts  
 
-Check status: `GET /scheduler/status` or the **Setup** page in Streamlit.
+---
 
-```env
-DAILY_SCAN_ENABLED=true
-DAILY_SCAN_HOUR=9
-DAILY_SCAN_MINUTE=0
-NOTIFIER_BACKEND=local   # switch to whatsapp when ready
-```
+## Roadmap
 
-### WhatsApp (coming soon)
-
-Set these when your Meta WhatsApp Cloud API credentials are ready:
-
-```env
-NOTIFIER_BACKEND=whatsapp
-WHATSAPP_ENABLED=true
-WHATSAPP_TOKEN=your_token
-WHATSAPP_PHONE_ID=your_phone_id
-WHATSAPP_RECIPIENT=+91XXXXXXXXXX
-```
-
-## Results pagination
-
-The Results page shows **10 jobs per page** by default (up to 15). Use Previous/Next to browse all matches from a run.
-
-API: `GET /jobs/matches/{run_id}?page=1&page_size=10`
-
-## Roadmap (post-MVP)
-
-- Additional job sources (Naukri, Indeed, LinkedIn, company pages)
-- WhatsApp Cloud API delivery
-- Auto-apply via browser automation
-- Cover letter and interview-prep agents
-- Multi-user SaaS dashboard
+- WhatsApp Cloud API digest delivery  
+- Cover-letter and interview-prep agents  
+- Selective auto-apply automation  
+- Multi-user / hosted variant (optional; core remains local-first)

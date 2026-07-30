@@ -1,12 +1,12 @@
 #!/bin/sh
-# Auto-commit (and optionally push) on file changes.
+# Auto-commit and push to GitHub when files change.
 #
-# Install gitwatch once (macOS):
+# Install once (macOS):
 #   brew install gitwatch
 #
 # Usage:
 #   ./scripts/start-gitwatch.sh          # commit only
-#   ./scripts/start-gitwatch.sh --push   # commit + push to origin
+#   ./scripts/start-gitwatch.sh --push   # commit + push to origin (GitHub)
 
 set -e
 cd "$(dirname "$0")/.."
@@ -21,13 +21,18 @@ git config core.hooksPath .githooks
 
 ROOT="$(pwd)"
 chmod +x "$ROOT/.githooks/prepare-commit-msg" 2>/dev/null || true
+chmod +x "$ROOT/scripts/gitwatch-commit-msg.sh" 2>/dev/null || true
 
+PUSH=0
 if [ "$1" = "--push" ]; then
-  echo "gitwatch: will push to origin after each commit"
+  PUSH=1
+  echo "gitwatch: auto-commit + push to origin on every save"
+else
+  echo "gitwatch: auto-commit only (pass --push to also push to GitHub)"
 fi
 
 echo "Watching $ROOT (Ctrl+C to stop)"
-if [ "$1" = "--push" ]; then
+if [ "$PUSH" = "1" ]; then
   exec gitwatch -f -r origin -m "Update" .
 else
   exec gitwatch -f -m "Update" .
