@@ -91,6 +91,7 @@ def call_ollama(
                 ],
                 format=fmt,
                 options=options,
+                keep_alive="5m",
             )
             return response["message"]["content"]
         except Exception as exc:  # noqa: BLE001

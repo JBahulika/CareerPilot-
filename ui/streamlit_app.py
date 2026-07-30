@@ -382,18 +382,41 @@ Settings come from your **Profile** (experience, location, strict/stretch rules)
             return
         run_id = resp.json()["run_id"]
         st.session_state["run_id"] = run_id
-        _poll_run(run_id)
+        _poll_run(run_id, top_n=int(top_n))
 
 
-def _poll_run(run_id: int) -> None:
+def _poll_timeout_seconds(top_n: int) -> int:
+    """Allow enough time for local LLM tailoring (~2–3 min per resume)."""
+    return max(1800, 300 + top_n * 180)
+
+
+def _step_progress(step: str) -> float:
+    steps = {"scrape": 0.2, "filter": 0.4, "match": 0.6, "tailor": 0.85, "complete": 1.0}
+    if step.startswith("tailor"):
+        if "(" in step and "/" in step:
+            try:
+                done, total = step.split("(")[1].split(")")[0].split("/")
+                total_n = max(int(total), 1)
+                return 0.7 + (int(done) / total_n) * 0.25
+            except (ValueError, IndexError):
+                pass
+        return steps["tailor"]
+    return steps.get(step, 0.05)
+
+
+def _poll_run(run_id: int, *, top_n: int = 10) -> None:
     progress = st.progress(0.0)
     status_box = st.empty()
-    steps = {"scrape": 0.2, "filter": 0.4, "match": 0.6, "tailor": 0.85, "complete": 1.0}
+    timeout_sec = _poll_timeout_seconds(top_n)
+    st.caption(
+        f"Tailoring uses your local Ollama model — expect ~2–3 min per resume. "
+        f"Waiting up to {timeout_sec // 60} min for {top_n} job(s)."
+    )
 
-    for _ in range(600):
+    for _ in range(timeout_sec):
         run = api_get(f"/pipeline/runs/{run_id}").json()
         step = run.get("current_step", "")
-        progress.progress(steps.get(step, 0.05))
+        progress.progress(_step_progress(step))
         status_box.info(
             f"Status: {run['status']} | step: {step or 'starting'} | "
             f"scraped {run['jobs_scraped']} | matched {run['jobs_matched']} | "
@@ -415,7 +438,17 @@ def _poll_run(run_id: int) -> None:
                 st.info("\n".join(run["errors"]))
             return
         time.sleep(1.0)
-    st.warning("Timed out waiting for the pipeline.")
+
+    run = api_get(f"/pipeline/runs/{run_id}").json()
+    if run.get("status") == "running":
+        st.warning(
+            f"UI stopped waiting after {timeout_sec // 60} min, but run **#{run_id}** "
+            f"is still **{run.get('current_step', 'running')}** in the background "
+            f"({run.get('pdfs_generated', 0)} PDFs so far). "
+            "Check **History** or **Results** in a few minutes, or lower **Top N**."
+        )
+    else:
+        st.warning("Timed out waiting for the pipeline.")
 
 
 def _format_posted_ago(iso_value: str | None) -> str:

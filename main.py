@@ -14,6 +14,7 @@ from agents.base import check_ollama_status
 from api.routes import jobs, pipeline, resume
 from core.config import settings
 from core.logging import get_logger
+from database.repositories import mark_stale_runs_failed
 from database.session import init_db
 from services.scheduler import get_scheduler_status, start_daily_scan, stop_daily_scan
 
@@ -25,6 +26,9 @@ async def lifespan(app: FastAPI):
     logger.info("Starting CareerPilot AI")
     settings.ensure_directories()
     init_db()
+    stale = mark_stale_runs_failed()
+    if stale:
+        logger.warning(f"Marked {stale} interrupted pipeline run(s) as failed")
 
     if settings.daily_scan_enabled:
         start_daily_scan(

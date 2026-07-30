@@ -138,22 +138,27 @@ def _tailor_node(state: PipelineState) -> PipelineState:
     update_run(state["run_id"], current_step="tailor")
     profile = state["profile"]
     matches = state.get("matches", [])
+    to_tailor = [m for m in matches if m.recommendation != Recommendation.SKIP]
+    total = len(to_tailor)
     pdfs: list[str] = []
     errors = list(state.get("errors", []))
 
-    for match in matches:
-        if match.recommendation == Recommendation.SKIP:
-            continue
+    for idx, match in enumerate(to_tailor, start=1):
+        update_run(
+            state["run_id"],
+            current_step=f"tailor ({idx}/{total})" if total else "tailor",
+        )
         try:
             tailored = _tailor.run(profile, match.job)
             pdf_path = _pdf.run(tailored, match.job)
             match.generated_pdf_path = pdf_path
             pdfs.append(pdf_path)
+            update_run(state["run_id"], pdfs_generated=len(pdfs))
         except Exception as exc:  # noqa: BLE001
             logger.error(f"Tailoring failed for '{match.job.title}': {exc}")
             errors.append(f"tailor[{match.job.title}]: {exc}")
 
-    update_run(state["run_id"], pdfs_generated=len(pdfs))
+    update_run(state["run_id"], pdfs_generated=len(pdfs), current_step="tailor")
     return {"generated_pdfs": pdfs, "matches": matches, "errors": errors}
 
 

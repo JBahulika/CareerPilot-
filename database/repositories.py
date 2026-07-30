@@ -202,6 +202,22 @@ def finish_run(run_id: int, status: str, errors: list[str]) -> None:
     )
 
 
+def mark_stale_runs_failed() -> int:
+    """Mark runs left in ``running`` after an API restart as failed."""
+    with get_session() as session:
+        rows = session.exec(
+            select(PipelineRunRow).where(PipelineRunRow.status == "running")
+        ).all()
+        for row in rows:
+            row.status = "failed"
+            row.errors_json = (row.errors_json or []) + [
+                "Run interrupted (API restarted or process stopped)."
+            ]
+            row.finished_at = datetime.utcnow()
+            session.add(row)
+        return len(rows)
+
+
 def get_run(run_id: int) -> Optional[dict]:
     with get_session() as session:
         row = session.get(PipelineRunRow, run_id)
