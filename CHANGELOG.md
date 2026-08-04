@@ -21,8 +21,31 @@ Do not ship feature work without a changelog line.
 
 ### Planned (phased roadmap)
 
-- Phase 3+: more safe sources, WhatsApp/email digests, proxies, optional cookies,
-  dedupe, skills-gap / cover-letter — see `docs/UPGRADE_NOTES.md`.
+- Phase 4+: WhatsApp/email digests, proxies, optional cookies, dedupe,
+  skills-gap / cover-letter — see `docs/UPGRADE_NOTES.md`.
+
+## [0.2.3] — 2026-08-05
+
+### Added
+
+- Source safety tags: `api` | `scrape_safe` | `scrape_risky` | `disabled_captcha`.
+- New safe sources: **The Muse** (API), **We Work Remotely** (RSS), **Working Nomads** (API).
+- Profile `enabled_sources` allowlist (empty = safe defaults). Aggregate respects it.
+- Setup table shows method, safety, default_on, and health.
+
+### Changed
+
+- Indeed / LinkedIn / Glassdoor tagged `disabled_captcha` and **off by default**.
+- Wellfound / Naukri tagged `scrape_risky` and **off by default**.
+
+### Notes
+
+- JobSpy not integrated (would need allowlist + Phase 2 client + captcha abort);
+  skipped for this phase.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged; RSS via stdlib).
 
 ## [0.2.2] — 2026-08-05
 

@@ -137,26 +137,31 @@ def page_setup() -> None:
         "(never solves them). Statuses: ok, rate_limited, captcha_blocked, disabled, error."
     )
     try:
-        health_resp = api_get("/jobs/sources/health").json()
-        rows = health_resp.get("sources", [])
+        sources = api_get("/jobs/sources").json().get("sources", [])
+        rows = [
+            {
+                "source": s.get("id"),
+                "name": s.get("name"),
+                "method": s.get("method"),
+                "safety": s.get("safety"),
+                "default_on": s.get("enabled_by_default"),
+                "health": s.get("health"),
+                "detail": s.get("health_detail") or s.get("notes") or "",
+            }
+            for s in sources
+            if s.get("id") != "all"
+        ]
         if rows:
-            st.dataframe(
-                [
-                    {
-                        "source": r.get("source_id"),
-                        "status": r.get("status"),
-                        "detail": r.get("detail") or "",
-                        "updated": r.get("updated_at") or "",
-                    }
-                    for r in rows
-                ],
-                use_container_width=True,
-            )
-            st.caption(
-                f"Cooldowncha/rate-limit cooldown: {health_resp.get('cooldown_seconds', 1800)}s"
-            )
+            st.dataframe(rows, use_container_width=True)
         else:
-            st.info("No source health recorded yet — run the pipeline once.")
+            st.info("No sources listed.")
+        try:
+            health_resp = api_get("/jobs/sources/health").json()
+            st.caption(
+                f"Captcha/rate-limit cooldown: {health_resp.get('cooldown_seconds', 1800)}s"
+            )
+        except Exception:
+            pass
     except Exception as exc:  # noqa: BLE001
         st.warning(f"Could not load source health: {exc}")
 
@@ -289,6 +294,37 @@ def page_profile() -> None:
         help="Only jobs at or above this score are tailored and included in digests. Default 60.",
     )
 
+    st.markdown("**Job sources (allowlist)**")
+    st.caption(
+        "Empty selection uses safe defaults (API/RSS). Captcha-prone boards stay off "
+        "unless you explicitly enable them."
+    )
+    try:
+        all_sources = [
+            s
+            for s in api_get("/jobs/sources").json().get("sources", [])
+            if s.get("id") != "all"
+        ]
+    except Exception:
+        all_sources = []
+    source_ids = [s["id"] for s in all_sources]
+    labels = {
+        s["id"]: (
+            f"{s.get('name')} [{s.get('safety', s.get('method'))}]"
+            + ("" if s.get("enabled_by_default", True) else " — off by default")
+        )
+        for s in all_sources
+    }
+    saved = profile.get("enabled_sources") or []
+    default_sel = [sid for sid in saved if sid in source_ids]
+    enabled_sources = st.multiselect(
+        "Enabled boards",
+        source_ids,
+        default=default_sel,
+        format_func=lambda x: labels.get(x, x),
+        help="Leave empty to use built-in safe defaults (API sources only).",
+    )
+
     if st.button("Save profile", type="primary"):
         profile["experience_level"] = selected_level
         profile["target_years_min"] = int(ymin)
@@ -300,6 +336,7 @@ def page_profile() -> None:
         profile["flex_years"] = int(flex_years)
         profile["exclude_internships"] = exclude_internships
         profile["min_match_score"] = int(min_match_score)
+        profile["enabled_sources"] = list(enabled_sources)
         if _save_profile(profile):
             st.success("Profile saved. Ready to run the pipeline.")
 
@@ -338,12 +375,32 @@ Settings come from your **Profile** (experience, location, strict/stretch rules)
 
     try:
         sources_resp = api_get("/jobs/sources").json()
-        source_options = [s["id"] for s in sources_resp.get("sources", [])]
+        allowed = set(profile.get("enabled_sources") or [])
+        raw_sources = sources_resp.get("sources", [])
+        source_options = []
+        for s in raw_sources:
+            sid = s["id"]
+            if sid == "all":
+                source_options.append(sid)
+                continue
+            if allowed:
+                if sid in allowed:
+                    source_options.append(sid)
+            elif s.get("enabled_by_default", True):
+                source_options.append(sid)
+        # Always allow explicit picks of any board (advanced)
+        for s in raw_sources:
+            if s["id"] not in source_options:
+                source_options.append(s["id"])
         source_labels = {
-            s["id"]: f"{s['name']} ({s['method']})" for s in sources_resp.get("sources", [])
+            s["id"]: (
+                f"{s['name']} ({s.get('method')}/{s.get('safety', '?')})"
+                + ("" if s.get("enabled_by_default", True) else " [off by default]")
+            )
+            for s in raw_sources
         }
     except Exception:
-        source_options = ["all", "remotive", "wellfound", "indeed", "naukri"]
+        source_options = ["all", "remotive", "themuse", "weworkremotely"]
         source_labels = {s: s for s in source_options}
 
     col1, col2, col3 = st.columns(3)

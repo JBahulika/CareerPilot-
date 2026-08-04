@@ -8,10 +8,13 @@ from agents.job_sources.registry import POPULAR_JOB_SITES, get_source, list_sour
 def test_popular_job_sites_list():
     ids = {s["id"] for s in POPULAR_JOB_SITES}
     assert "remotive" in ids
+    assert "themuse" in ids
+    assert "weworkremotely" in ids
+    assert "workingnomads" in ids
     assert "indeed" in ids
     assert "naukri" in ids
     assert "linkedin" in ids
-    assert len(POPULAR_JOB_SITES) >= 8
+    assert len(POPULAR_JOB_SITES) >= 10
 
 
 def test_get_source_all():

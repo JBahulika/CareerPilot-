@@ -79,6 +79,8 @@ class UserProfile(BaseModel):
     flex_years: Optional[int] = None
     exclude_internships: bool = False
     min_match_score: int = 60  # 0–100; only notify/tailor matches at or above
+    # Empty = use registry enabled_by_default (safe APIs). Explicit list = allowlist.
+    enabled_sources: list[str] = Field(default_factory=list)
 
     def all_skills(self) -> list[str]:
         """Technical skills plus legacy flat skills list (deduplicated)."""

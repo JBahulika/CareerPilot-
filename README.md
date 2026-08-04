@@ -1,6 +1,6 @@
 # CareerPilot AI
 
-**Version [`0.2.2`](VERSION)** · [Changelog](CHANGELOG.md) · [Upgrade notes](docs/UPGRADE_NOTES.md) · [Legal stance](docs/LEGAL.md)
+**Version [`0.2.3`](VERSION)** · [Changelog](CHANGELOG.md) · [Upgrade notes](docs/UPGRADE_NOTES.md) · [Legal stance](docs/LEGAL.md)
 
 An autonomous, **local-first** AI assistant that discovers relevant jobs, scores
 them against your resume, and generates ATS-friendly tailored resumes — all on
@@ -120,20 +120,23 @@ All settings live in `.env` (see [`.env.example`](.env.example)):
 
 ### Job sources
 
-CareerPilot scrapes these popular job boards (API where available, Playwright otherwise):
+CareerPilot prefers public API/RSS sources. Captcha-prone scrapes are off by default:
 
-| Site | Method | Region |
-|------|--------|--------|
-| Remotive | API | Global |
-| RemoteOK | API | Global |
-| Arbeitnow | API | Global |
-| Jobicy | API | Global |
-| Himalayas | API | Global |
-| Wellfound (AngelList) | Scrape | Global |
-| Indeed | Scrape | Global |
-| Naukri | Scrape | India |
-| LinkedIn | Scrape | Global |
-| Glassdoor | Scrape | Global |
+| Site | Method | Region | Safety | Default |
+|------|--------|--------|--------|---------|
+| Remotive | API | Global | api | on |
+| RemoteOK | API | Global | api | on |
+| Arbeitnow | API | Global | api | on |
+| Jobicy | API | Global | api | on |
+| Himalayas | API | Global | api | on |
+| The Muse | API | Global | api | on |
+| We Work Remotely | RSS | Global | api | on |
+| Working Nomads | API | Global | api | on |
+| Wellfound (AngelList) | Scrape | Global | scrape_risky | off |
+| Naukri | Scrape | India | scrape_risky | off |
+| Indeed | Scrape | Global | disabled_captcha | off |
+| LinkedIn | Scrape | Global | disabled_captcha | off |
+| Glassdoor | Scrape | Global | disabled_captcha | off |
 
 Set `JOB_SOURCE=all` to query every source in one run, or pick a single id (e.g. `remotive`, `naukri`). Scraped sites may return fewer results when a board blocks automation. Challenge/captcha pages are **aborted** (`captcha_blocked`) — CareerPilot never solves captchas. Check **Setup → Job source health** or `GET /jobs/sources/health`.
 
