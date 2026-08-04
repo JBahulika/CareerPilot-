@@ -7,6 +7,8 @@ optional internship exclusion, location preference, and experience-level gating.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+
 from core.logging import get_logger
 from models.schemas import JobListing, UserProfile
 from services.seniority import (
@@ -23,6 +25,25 @@ logger = get_logger(__name__)
 _INTERNSHIP_TERMS = ("intern", "internship", "trainee")
 
 
+@dataclass
+class FilterResult:
+    """Kept jobs plus compact exclusion counts for UI/history transparency."""
+
+    jobs: list[JobListing]
+    exclusions: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def exclusion_summary(self) -> str:
+        if not self.exclusions:
+            return ""
+        parts = [
+            f"{reason.replace('_', ' ')}: {count}"
+            for reason, count in sorted(self.exclusions.items())
+            if count
+        ]
+        return "; ".join(parts)
+
+
 class JobFilterAgent:
     def run(
         self,
@@ -32,42 +53,53 @@ class JobFilterAgent:
         strict_experience: bool = True,
         allow_stretch: bool = False,
         flex_years: int | None = None,
-    ) -> list[JobListing]:
+    ) -> FilterResult:
         seen: set[str] = set()
         kept: list[JobListing] = []
+        exclusions: dict[str, int] = {}
         candidate_tier = infer_candidate_tier(profile)
+
+        def _drop(reason: str) -> None:
+            exclusions[reason] = exclusions.get(reason, 0) + 1
 
         for job in jobs:
             if job.content_hash in seen:
+                _drop("duplicate")
                 continue
             seen.add(job.content_hash)
 
             if exclude_internships and self._is_internship(job):
+                _drop("internship")
                 continue
 
             if strict_experience and not self._experience_level_ok(
                 job, profile, allow_stretch=allow_stretch, flex_years=flex_years
             ):
+                _drop("experience_mismatch")
                 continue
 
             if has_unrelated_enterprise_stack(job, profile):
                 logger.info(f"Filter: dropped '{job.title}' — unrelated tech stack")
+                _drop("enterprise_stack")
                 continue
 
             if not role_relevant(job, profile):
                 logger.info(f"Filter: dropped '{job.title}' — role/skill mismatch")
+                _drop("role_mismatch")
                 continue
 
             if not self._location_ok(job, profile):
+                _drop("location_mismatch")
                 continue
 
             kept.append(job)
 
         logger.info(
             f"Filter: {len(jobs)} -> {len(kept)} jobs "
-            f"(candidate tier: {candidate_tier_label(candidate_tier)})"
+            f"(candidate tier: {candidate_tier_label(candidate_tier)}; "
+            f"exclusions={exclusions or '{}'})"
         )
-        return kept
+        return FilterResult(jobs=kept, exclusions=exclusions)
 
     @staticmethod
     def _experience_level_ok(

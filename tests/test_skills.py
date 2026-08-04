@@ -42,7 +42,7 @@ def test_abap_job_blocked_for_aiml_profile():
     profile = _aiml_profile()
     job = _job("SAP ABAP Developer", "ABAP and SAP required", skills=["ABAP", "SAP"])
     assert has_unrelated_enterprise_stack(job, profile)
-    kept = JobFilterAgent().run([job], profile, strict_experience=True)
+    kept = JobFilterAgent().run([job], profile, strict_experience=True).jobs
     assert len(kept) == 0
 
 

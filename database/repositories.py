@@ -224,6 +224,7 @@ def get_run(run_id: int) -> Optional[dict]:
             "jobs_matched": row.jobs_matched,
             "pdfs_generated": row.pdfs_generated,
             "errors": row.errors_json or [],
+            "summary": row.summary_json or {},
             "started_at": row.started_at.isoformat() if row.started_at else None,
             "finished_at": row.finished_at.isoformat() if row.finished_at else None,
         }
@@ -241,6 +242,7 @@ def list_runs(limit: int = 20) -> list[dict]:
                 "jobs_scraped": row.jobs_scraped,
                 "jobs_matched": row.jobs_matched,
                 "pdfs_generated": row.pdfs_generated,
+                "summary": row.summary_json or {},
                 "started_at": row.started_at.isoformat() if row.started_at else None,
                 "finished_at": row.finished_at.isoformat() if row.finished_at else None,
             }

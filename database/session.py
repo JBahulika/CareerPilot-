@@ -22,12 +22,16 @@ def _migrate_columns() -> None:
     from sqlalchemy import inspect, text
 
     inspector = inspect(engine)
-    if "jobs" not in inspector.get_table_names():
-        return
-    columns = {col["name"] for col in inspector.get_columns("jobs")}
+    tables = inspector.get_table_names()
     with engine.begin() as conn:
-        if "posted_at" not in columns:
-            conn.execute(text("ALTER TABLE jobs ADD COLUMN posted_at DATETIME"))
+        if "jobs" in tables:
+            columns = {col["name"] for col in inspector.get_columns("jobs")}
+            if "posted_at" not in columns:
+                conn.execute(text("ALTER TABLE jobs ADD COLUMN posted_at DATETIME"))
+        if "pipeline_runs" in tables:
+            columns = {col["name"] for col in inspector.get_columns("pipeline_runs")}
+            if "summary_json" not in columns:
+                conn.execute(text("ALTER TABLE pipeline_runs ADD COLUMN summary_json JSON"))
 
 
 def init_db() -> None:

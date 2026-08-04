@@ -70,5 +70,6 @@ class PipelineRunRow(SQLModel, table=True):
     jobs_matched: int = 0
     pdfs_generated: int = 0
     errors_json: list = Field(default_factory=list, sa_column=Column(SA_JSON))
+    summary_json: dict = Field(default_factory=dict, sa_column=Column(SA_JSON))
     started_at: datetime = Field(default_factory=datetime.utcnow)
     finished_at: Optional[datetime] = None

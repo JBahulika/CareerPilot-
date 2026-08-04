@@ -78,6 +78,7 @@ class UserProfile(BaseModel):
     allow_stretch: bool = False
     flex_years: Optional[int] = None
     exclude_internships: bool = False
+    min_match_score: int = 60  # 0–100; only notify/tailor matches at or above
 
     def all_skills(self) -> list[str]:
         """Technical skills plus legacy flat skills list (deduplicated)."""

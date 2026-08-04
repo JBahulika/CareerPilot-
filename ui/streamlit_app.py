@@ -252,6 +252,13 @@ def page_profile() -> None:
         "Exclude internships",
         value=profile.get("exclude_internships", False),
     )
+    min_match_score = st.slider(
+        "Minimum match score (%)",
+        0,
+        100,
+        int(profile.get("min_match_score") if profile.get("min_match_score") is not None else 60),
+        help="Only jobs at or above this score are tailored and included in digests. Default 60.",
+    )
 
     if st.button("Save profile", type="primary"):
         profile["experience_level"] = selected_level
@@ -263,6 +270,7 @@ def page_profile() -> None:
         profile["allow_stretch"] = allow_stretch
         profile["flex_years"] = int(flex_years)
         profile["exclude_internships"] = exclude_internships
+        profile["min_match_score"] = int(min_match_score)
         if _save_profile(profile):
             st.success("Profile saved. Ready to run the pipeline.")
 
@@ -286,11 +294,15 @@ Settings come from your **Profile** (experience, location, strict/stretch rules)
 
     loc = profile.get("preferred_location") or profile.get("location") or "Any"
     remote = "yes" if profile.get("include_remote", True) else "no"
+    saved_threshold = int(
+        profile.get("min_match_score") if profile.get("min_match_score") is not None else 60
+    )
     st.info(
         f"Using profile: **{profile.get('experience_level')}** "
         f"({profile.get('target_years_min', 0)}–{profile.get('target_years_max', 1)} yrs) · "
         f"roles: {', '.join(profile.get('preferred_roles', [])[:3]) or profile.get('role', '—')} · "
         f"location: **{loc}** · remote: **{remote}** · "
+        f"min match: **{saved_threshold}%** · "
         f"strict: **{'on' if profile.get('strict_experience', True) else 'off'}** · "
         f"stretch: **{'on' if profile.get('allow_stretch') else 'off'}**"
     )
@@ -321,6 +333,17 @@ Settings come from your **Profile** (experience, location, strict/stretch rules)
             value="",
             placeholder="Leave blank to use profile location",
         )
+        run_include_remote = st.checkbox(
+            "Include remote (this run)",
+            value=profile.get("include_remote", True),
+        )
+        run_min_match = st.slider(
+            "Min match score for this run (%)",
+            0,
+            100,
+            saved_threshold,
+            help="Does not change your saved Profile threshold unless you save it there.",
+        )
         recent_days = st.slider(
             "Only jobs posted in last N days",
             1,
@@ -339,8 +362,9 @@ Settings come from your **Profile** (experience, location, strict/stretch rules)
             "strict_experience": profile.get("strict_experience", True),
             "allow_stretch": profile.get("allow_stretch", False),
             "flex_years": profile.get("flex_years"),
-            "include_remote": profile.get("include_remote", True),
+            "include_remote": bool(run_include_remote),
             "recent_days": int(recent_days),
+            "min_match_score": int(run_min_match),
         }
         if run_location.strip():
             payload["location"] = run_location.strip()
@@ -373,6 +397,18 @@ def _poll_run(run_id: int) -> None:
                 st.success("Pipeline complete. See the Results page.")
             else:
                 st.error("Pipeline failed.")
+            summary = run.get("summary") or {}
+            if summary:
+                excl = summary.get("filter_exclusions") or {}
+                excl_bits = [
+                    f"{k.replace('_', ' ')}: {v}" for k, v in sorted(excl.items()) if v
+                ]
+                st.caption(
+                    f"Threshold ≥ {summary.get('min_match_score', '—')}% · "
+                    f"location: {summary.get('location') or 'Any'} · "
+                    f"remote: {'yes' if summary.get('include_remote', True) else 'no'}"
+                    + (f" · filtered out — {'; '.join(excl_bits)}" if excl_bits else "")
+                )
             if run.get("errors"):
                 st.warning("\n".join(run["errors"]))
             return
@@ -401,6 +437,22 @@ def page_results() -> None:
     st.header("Results")
     run_id = st.session_state.get("run_id")
     run_id = st.number_input("Run ID", 1, value=int(run_id) if run_id else 1)
+
+    run_meta = {}
+    try:
+        run_meta = api_get(f"/pipeline/runs/{int(run_id)}").json()
+    except Exception:
+        run_meta = {}
+    summary = run_meta.get("summary") or {}
+    if summary:
+        excl = summary.get("filter_exclusions") or {}
+        excl_bits = [f"{k.replace('_', ' ')}: {v}" for k, v in sorted(excl.items()) if v]
+        st.info(
+            f"Min match **{summary.get('min_match_score', '—')}%** · "
+            f"location **{summary.get('location') or 'Any'}** · "
+            f"remote **{'on' if summary.get('include_remote', True) else 'off'}**"
+            + (f" · exclusions — {'; '.join(excl_bits)}" if excl_bits else "")
+        )
 
     page_size = st.selectbox("Jobs per page", [10, 15], index=0)
     if "results_page" not in st.session_state:
@@ -433,7 +485,7 @@ def page_results() -> None:
     nav2.caption(f"Page {page} of {total_pages} · {total} jobs total")
 
     if not matches:
-        st.info("No matches for this run yet.")
+        st.info("No matches for this run yet (none passed filters and min match score).")
         return
 
     for m in matches:
@@ -475,7 +527,31 @@ def page_history() -> None:
     if not runs:
         st.info("No pipeline runs yet.")
         return
-    st.dataframe(runs, use_container_width=True)
+
+    display_rows = []
+    for run in runs:
+        summary = run.get("summary") or {}
+        excl = summary.get("filter_exclusions") or {}
+        excl_bits = [f"{k}:{v}" for k, v in sorted(excl.items()) if v]
+        display_rows.append(
+            {
+                "id": run.get("id"),
+                "status": run.get("status"),
+                "scraped": run.get("jobs_scraped"),
+                "matched": run.get("jobs_matched"),
+                "pdfs": run.get("pdfs_generated"),
+                "min_%": summary.get("min_match_score"),
+                "location": summary.get("location") or "",
+                "exclusions": "; ".join(excl_bits) if excl_bits else "",
+                "started_at": run.get("started_at"),
+                "finished_at": run.get("finished_at"),
+            }
+        )
+    st.dataframe(display_rows, use_container_width=True)
+    st.caption(
+        "Exclusions summarize filter drops (location, experience, etc.). "
+        "Matched jobs already cleared the min match score for that run."
+    )
 
 
 def main() -> None:

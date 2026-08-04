@@ -17,9 +17,25 @@ Do not ship feature work without a changelog line.
 
 ### Planned (phased roadmap)
 
-- Phase 1+: user-settable match threshold, safe scrape layer, more API sources,
-  WhatsApp/email digests, proxies/quiet hours, optional cookies, dedupe,
-  skills-gap / cover-letter on user select — see `docs/UPGRADE_NOTES.md`.
+- Phase 2+: safe scrape layer, more API sources, WhatsApp/email digests, proxies,
+  optional cookies, dedupe, skills-gap / cover-letter on user select — see
+  `docs/UPGRADE_NOTES.md`.
+
+## [0.2.1] — 2026-08-05
+
+### Added
+
+- User-settable `min_match_score` (0–100, default 60) on profile, config
+  (`MIN_MATCH_SCORE`), API (`/pipeline/run`), and Streamlit Profile + per-run override.
+- Filter exclusion counts (`location_mismatch`, `experience_mismatch`, etc.) stored
+  on pipeline runs (`summary_json`) and shown in Results / History.
+- Digest/notifier paths drop matches below the effective threshold.
+- `services/threshold.py` helpers and unit tests.
+
+### Changed
+
+- `JobFilterAgent.run` returns `FilterResult` (jobs + exclusions) for transparency.
+- Matcher applies min score before Top-N truncation.
 
 ## [0.2.0] — 2026-08-05
 
