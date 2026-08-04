@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 
 from agents.scraper_agent import JobScraperAgent
-from agents.job_sources.registry import list_sources
+from agents.job_sources.registry import list_sources, list_sources_with_health
 from core.config import settings
 from core.logging import get_logger
 from database.repositories import (
@@ -16,6 +16,7 @@ from database.repositories import (
     get_matches_for_run,
     upsert_jobs,
 )
+from services.source_health import get_source_health_registry
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 logger = get_logger(__name__)
@@ -24,8 +25,17 @@ _scraper = JobScraperAgent()
 
 @router.get("/sources")
 def job_sources() -> dict:
-    return {"sources": list_sources()}
+    return {"sources": list_sources_with_health()}
 
+
+@router.get("/sources/health")
+def job_sources_health() -> dict:
+    """Per-source health: ok | rate_limited | captcha_blocked | disabled | error."""
+    ids = [s["id"] for s in list_sources() if s["id"] != "all"]
+    return {
+        "cooldown_seconds": settings.scrape_health_cooldown_seconds,
+        "sources": get_source_health_registry().list_all(ids),
+    }
 
 @router.post("/scrape")
 def scrape_jobs(

@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
-import requests
-
 from agents.job_sources.common import (
     annotate_and_filter_jobs,
     build_job,
@@ -16,6 +12,8 @@ from agents.job_sources.common import (
 )
 from core.logging import get_logger
 from models.schemas import JobListing, UserProfile
+from services.scrape_http import CaptchaBlockedError, RateLimitedError, get_scrape_client
+from services.source_health import get_source_health_registry
 
 logger = get_logger(__name__)
 
@@ -26,14 +24,16 @@ class RemotiveSource:
     def fetch(self, profile, limit, *, allow_stretch=False, flex_years=None) -> list[JobListing]:
         query = search_terms(profile)
         try:
-            resp = requests.get(
+            raw = get_scrape_client().get_json(
                 "https://remotive.com/api/remote-jobs",
+                source_id=self.name,
                 params={"search": query, "limit": limit},
-                timeout=30,
-            )
-            resp.raise_for_status()
-            raw = resp.json().get("jobs", [])
+            ).get("jobs", [])
+        except (CaptchaBlockedError, RateLimitedError) as exc:
+            logger.error(f"Remotive aborted: {exc}")
+            return []
         except Exception as exc:  # noqa: BLE001
+            get_source_health_registry().record(self.name, "error", str(exc))
             logger.error(f"Remotive failed: {exc}")
             return []
 
@@ -59,16 +59,17 @@ class RemoteOKSource:
 
     def fetch(self, profile, limit, *, allow_stretch=False, flex_years=None) -> list[JobListing]:
         try:
-            resp = requests.get(
+            raw = get_scrape_client().get_json(
                 "https://remoteok.com/api",
-                headers={"User-Agent": "CareerPilot/1.0"},
-                timeout=30,
+                source_id=self.name,
             )
-            resp.raise_for_status()
-            raw = resp.json()
             if raw and isinstance(raw[0], str):
                 raw = raw[1:]
+        except (CaptchaBlockedError, RateLimitedError) as exc:
+            logger.error(f"RemoteOK aborted: {exc}")
+            return []
         except Exception as exc:  # noqa: BLE001
+            get_source_health_registry().record(self.name, "error", str(exc))
             logger.error(f"RemoteOK failed: {exc}")
             return []
 
@@ -105,13 +106,15 @@ class ArbeitnowSource:
 
     def fetch(self, profile, limit, *, allow_stretch=False, flex_years=None) -> list[JobListing]:
         try:
-            resp = requests.get(
+            raw = get_scrape_client().get_json(
                 "https://www.arbeitnow.com/api/job-board-api",
-                timeout=30,
-            )
-            resp.raise_for_status()
-            raw = resp.json().get("data", [])
+                source_id=self.name,
+            ).get("data", [])
+        except (CaptchaBlockedError, RateLimitedError) as exc:
+            logger.error(f"Arbeitnow aborted: {exc}")
+            return []
         except Exception as exc:  # noqa: BLE001
+            get_source_health_registry().record(self.name, "error", str(exc))
             logger.error(f"Arbeitnow failed: {exc}")
             return []
 
@@ -145,14 +148,16 @@ class JobicySource:
     def fetch(self, profile, limit, *, allow_stretch=False, flex_years=None) -> list[JobListing]:
         query = search_terms(profile).split()[0] if search_terms(profile) else "engineer"
         try:
-            resp = requests.get(
+            raw = get_scrape_client().get_json(
                 "https://jobicy.com/api/v2/remote-jobs",
+                source_id=self.name,
                 params={"count": limit, "tag": query},
-                timeout=30,
-            )
-            resp.raise_for_status()
-            raw = resp.json().get("jobs", [])
+            ).get("jobs", [])
+        except (CaptchaBlockedError, RateLimitedError) as exc:
+            logger.error(f"Jobicy aborted: {exc}")
+            return []
         except Exception as exc:  # noqa: BLE001
+            get_source_health_registry().record(self.name, "error", str(exc))
             logger.error(f"Jobicy failed: {exc}")
             return []
 
@@ -178,14 +183,16 @@ class HimalayasSource:
 
     def fetch(self, profile, limit, *, allow_stretch=False, flex_years=None) -> list[JobListing]:
         try:
-            resp = requests.get(
+            raw = get_scrape_client().get_json(
                 "https://himalayas.app/jobs/api",
+                source_id=self.name,
                 params={"limit": limit},
-                timeout=30,
-            )
-            resp.raise_for_status()
-            raw = resp.json().get("jobs", [])
+            ).get("jobs", [])
+        except (CaptchaBlockedError, RateLimitedError) as exc:
+            logger.error(f"Himalayas aborted: {exc}")
+            return []
         except Exception as exc:  # noqa: BLE001
+            get_source_health_registry().record(self.name, "error", str(exc))
             logger.error(f"Himalayas failed: {exc}")
             return []
 

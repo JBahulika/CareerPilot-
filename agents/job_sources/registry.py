@@ -80,4 +80,29 @@ def get_source(name: str) -> JobSource:
 
 
 def list_sources() -> list[dict[str, str]]:
-    return POPULAR_JOB_SITES + [{"id": "all", "name": "All sources (aggregate)", "method": "mixed", "region": "global"}]
+    return POPULAR_JOB_SITES + [
+        {"id": "all", "name": "All sources (aggregate)", "method": "mixed", "region": "global"}
+    ]
+
+
+def list_sources_with_health() -> list[dict]:
+    """Sources metadata plus live health status for Setup/API."""
+    from services.source_health import get_source_health_registry
+
+    health = get_source_health_registry()
+    rows = []
+    for meta in list_sources():
+        sid = meta["id"]
+        if sid == "all":
+            rows.append({**meta, "health": "ok", "health_detail": "aggregate"})
+            continue
+        h = health.get(sid)
+        rows.append(
+            {
+                **meta,
+                "health": h.status,
+                "health_detail": h.detail,
+                "health_updated_at": h.updated_at,
+            }
+        )
+    return rows

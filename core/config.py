@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     daily_recent_jobs_days: int = 2
     default_include_remote: bool = True
 
+    # Safe scrape HTTP (Phase 2) — polite delays; never solve captchas
+    scrape_min_delay_ms: int = 400
+    scrape_max_delay_ms: int = 1200
+    scrape_max_concurrency: int = 2
+    scrape_max_retries: int = 2
+    scrape_health_cooldown_seconds: int = 1800
+
     # Daily scan (9 AM — fresh jobs + tailored resumes for WhatsApp digest)
     daily_scan_enabled: bool = True
     daily_scan_hour: int = 9

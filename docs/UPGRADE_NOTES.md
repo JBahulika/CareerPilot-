@@ -48,11 +48,12 @@ Workflow:
 
 - [`phase-0-upgrade-notes`](https://github.com/JBahulika/CareerPilot-/tree/phase-0-upgrade-notes)
 - [`phase-1-match-threshold`](https://github.com/JBahulika/CareerPilot-/tree/phase-1-match-threshold)
+- [`phase-2-safe-scrape-client`](https://github.com/JBahulika/CareerPilot-/tree/phase-2-safe-scrape-client)
 - [`main`](https://github.com/JBahulika/CareerPilot-/tree/main) (latest merged work)
 
 ## Models pin (update when defaults change)
 
-| Component | Current default (0.2.1) |
+| Component | Current default (0.2.2) |
 |-----------|-------------------------|
 | Ollama LLM | `qwen2.5:7b` |
 | Embeddings | `BAAI/bge-base-en-v1.5` |
@@ -60,6 +61,13 @@ Workflow:
 | Min match score | `60` (user-settable) |
 
 Source of truth for runtime knobs: `core/config.py` (mirrored in `.env.example`).
+
+## [0.2.2] — Phase 2 safe scrape client + source health
+
+- Browser-like HTTP client with jitter, concurrency, retries; captcha → abort.
+- Playwright scrapers share UA/headers + captcha abort.
+- Setup / `GET /jobs/sources/health` for per-source status.
+- Dependencies: no `requirements.txt` changes (`httpx` already present).
 
 ## [0.2.1] — Phase 1 match threshold + filter transparency
 
@@ -84,7 +92,6 @@ Source of truth for runtime knobs: `core/config.py` (mirrored in `.env.example`)
 
 | Phase | Intent |
 |-------|--------|
-| 2 | Safe scrape HTTP client (headers, jitter, captcha abort, source health) |
 | 3 | More safe sources + allowlist; disable captcha-prone by default |
 | 4 | WhatsApp + email digests (human chooses applications; digest caps) |
 | 5 | Proxies, random scan window, quiet hours, 429 backoff |

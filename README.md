@@ -1,6 +1,6 @@
 # CareerPilot AI
 
-**Version [`0.2.1`](VERSION)** · [Changelog](CHANGELOG.md) · [Upgrade notes](docs/UPGRADE_NOTES.md) · [Legal stance](docs/LEGAL.md)
+**Version [`0.2.2`](VERSION)** · [Changelog](CHANGELOG.md) · [Upgrade notes](docs/UPGRADE_NOTES.md) · [Legal stance](docs/LEGAL.md)
 
 An autonomous, **local-first** AI assistant that discovers relevant jobs, scores
 them against your resume, and generates ATS-friendly tailored resumes — all on
@@ -110,6 +110,8 @@ All settings live in `.env` (see [`.env.example`](.env.example)):
 
 - `OLLAMA_MODEL` — local model tag (default `qwen2.5:7b`).
 - `MIN_MATCH_SCORE` — default minimum match % (0–100, default `60`); Profile can override.
+- `SCRAPE_MIN_DELAY_MS` / `SCRAPE_MAX_DELAY_MS` — jitter between scrape/API requests.
+- `SCRAPE_MAX_CONCURRENCY` / `SCRAPE_MAX_RETRIES` — polite concurrency and backoff.
 - `JOB_SOURCE` — `all` (default, aggregates every source below) or a single site id.
 - `EXPERIENCE_FLEX_YEARS` — +/- years around your target range when matching jobs.
 - `DEFAULT_INCLUDE_REMOTE` — include remote jobs when filtering by location (default `true`).
@@ -133,7 +135,7 @@ CareerPilot scrapes these popular job boards (API where available, Playwright ot
 | LinkedIn | Scrape | Global |
 | Glassdoor | Scrape | Global |
 
-Set `JOB_SOURCE=all` to query every source in one run, or pick a single id (e.g. `remotive`, `naukri`). Scraped sites may return fewer results when a board blocks automation.
+Set `JOB_SOURCE=all` to query every source in one run, or pick a single id (e.g. `remotive`, `naukri`). Scraped sites may return fewer results when a board blocks automation. Challenge/captcha pages are **aborted** (`captcha_blocked`) — CareerPilot never solves captchas. Check **Setup → Job source health** or `GET /jobs/sources/health`.
 
 ### Experience matching
 

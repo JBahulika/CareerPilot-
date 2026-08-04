@@ -1,7 +1,13 @@
-"""Playwright-based job board scrapers (best-effort)."""
+"""Playwright-based job board scrapers (best-effort).
+
+Uses browser-like User-Agent and polite delays. On captcha/challenge pages the
+source aborts (captcha_blocked) — captchas are never solved.
+"""
 
 from __future__ import annotations
 
+import random
+import time
 from datetime import datetime
 from urllib.parse import quote_plus
 
@@ -12,26 +18,56 @@ from agents.job_sources.common import (
     search_terms,
     sort_and_filter_recent,
 )
+from core.config import settings
 from core.logging import get_logger
 from models.schemas import JobListing, UserProfile
+from services.scrape_http import (
+    CaptchaBlockedError,
+    assert_page_not_captcha,
+    browser_headers,
+    playwright_user_agent,
+)
+from services.source_health import get_source_health_registry
 
 logger = get_logger(__name__)
 
 
-def _playwright_fetch_cards(url: str, selectors: list[str], limit: int) -> list[dict]:
+def _playwright_fetch_cards(
+    url: str,
+    selectors: list[str],
+    limit: int,
+    *,
+    source_id: str,
+) -> list[dict]:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
         logger.error("Playwright not installed.")
+        get_source_health_registry().record(source_id, "error", "playwright missing")
         return []
+
+    lo = max(0, settings.scrape_min_delay_ms)
+    hi = max(lo, settings.scrape_max_delay_ms)
+    if hi:
+        time.sleep(random.randint(lo, hi) / 1000.0)
 
     results: list[dict] = []
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
+            context = browser.new_context(
+                user_agent=playwright_user_agent(),
+                extra_http_headers={
+                    k: v
+                    for k, v in browser_headers(source_id=source_id).items()
+                    if k != "User-Agent"
+                },
+            )
+            page = context.new_page()
             page.goto(url, timeout=45000, wait_until="domcontentloaded")
             page.wait_for_timeout(3000)
+            html = page.content()
+            assert_page_not_captcha(html, source_id=source_id, url=url)
             cards = []
             for sel in selectors:
                 cards = page.query_selector_all(sel)
@@ -54,7 +90,11 @@ def _playwright_fetch_cards(url: str, selectors: list[str], limit: int) -> list[
                     }
                 )
             browser.close()
+        get_source_health_registry().mark_ok(source_id, f"cards={len(results)}")
+    except CaptchaBlockedError:
+        return []
     except Exception as exc:  # noqa: BLE001
+        get_source_health_registry().record(source_id, "error", str(exc))
         logger.error(f"Playwright scrape failed for {url}: {exc}")
     return results
 
@@ -78,6 +118,7 @@ class WellfoundSource:
             url,
             ["[data-test='JobSearchResult']", ".styles_component__Ns_gK", "div[data-testid*='job']"],
             limit,
+            source_id=self.name,
         )
         now = datetime.utcnow()
         jobs = []
@@ -112,6 +153,7 @@ class IndeedSource:
             url,
             [".job_seen_beacon", ".jobsearch-ResultsList li", "div[data-jk]"],
             limit,
+            source_id=self.name,
         )
         jobs = [
             build_job(
@@ -145,6 +187,7 @@ class NaukriSource:
             url,
             [".cust-job-tuple", ".srp-jobtuple-wrapper", "article.jobTuple"],
             limit,
+            source_id=self.name,
         )
         jobs = [
             build_job(
@@ -153,7 +196,9 @@ class NaukriSource:
                 title=card["title"],
                 description=card["description"],
                 location=card.get("location") or (loc or "India"),
-                apply_url=card["apply_url"] if card["apply_url"].startswith("http") else f"https://www.naukri.com{card['apply_url']}",
+                apply_url=card["apply_url"]
+                if card["apply_url"].startswith("http")
+                else f"https://www.naukri.com{card['apply_url']}",
             )
             for card in cards
         ]
@@ -173,6 +218,7 @@ class LinkedInSource:
             url,
             [".base-card", "li.jobs-search__results-list div", "div.job-search-card"],
             limit,
+            source_id=self.name,
         )
         jobs = [
             build_job(
@@ -201,6 +247,7 @@ class GlassdoorSource:
             url,
             ["li.react-job-listing", "article.JobCard", "div[data-test='jobListing']"],
             limit,
+            source_id=self.name,
         )
         jobs = [
             build_job(
