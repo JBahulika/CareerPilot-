@@ -55,14 +55,62 @@ Workflow:
 
 ## Models pin (update when defaults change)
 
-| Component | Current default (0.2.4) |
+| Component | Current default (0.2.11) |
 |-----------|-------------------------|
 | Ollama LLM | `qwen2.5:7b` |
 | Embeddings | `BAAI/bge-base-en-v1.5` |
 | Reranker | `BAAI/bge-reranker-base` (enabled) |
 | Min match score | `60` (user-settable) |
+| Scrape limit max | `2000` (`SCRAPE_LIMIT_MAX`) |
 
 Source of truth for runtime knobs: `core/config.py` (mirrored in `.env.example`).
+
+## [0.2.11] — Match honesty: sales fluff + role gates
+
+- Filter drops solution selling / champion building / pre-post-sales duties.
+- Entry profiles: Principal/Partner + sales/solutions-engineer roles → Skip/low score.
+- Dependencies: no `requirements.txt` changes.
+
+## [0.2.10] — City aliases + geo expansion
+
+- Bangalore/Bengaluru, Bombay/Mumbai, Delhi/New Delhi, etc.
+- Preference expands for scrape URLs; filter matches aliases + state context.
+- Dependencies: no `requirements.txt` changes.
+
+## [0.2.9] — Logs with per-source scrape diagnostics
+
+- History → Logs; sidebar tagline removed.
+- Each pipeline run records per-website scrape stats in `summary_json`.
+- Dependencies: no `requirements.txt` changes.
+
+## [0.2.8] — Cleaner missing skills + scrape UX
+
+- Soft skills stripped from match Missing list; technical gaps only.
+- Senior roles for fresher/0–1 hard-capped in matcher score.
+- UI shows scrape max 2000 + per-board estimate.
+- Profile experience: min/max years only (no discrete level dropdown).
+- Dependencies: no `requirements.txt` changes.
+
+## [0.2.7] — Higher scrape limit ceiling
+
+- Run Pipeline / `/jobs/scrape` max raised 300 → 2000.
+- Tip: set ~`100 × number of enabled boards` for ~100 asks per source.
+- Dependencies: no `requirements.txt` changes.
+
+## [0.2.6] — Restore best-effort Playwright scrapers
+
+- LinkedIn / Indeed / Naukri / Wellfound / Glassdoor: pre–Phase 2 Playwright
+  (no captcha abort; Aggregate always attempts enabled boards).
+- All scrape boards default-on again.
+- Still never solves captchas / never uses bypass kits.
+- Dependencies: no `requirements.txt` changes.
+
+## [0.2.5] — Fix match crash on Chroma NumPy arrays
+
+- `services/vector_store.py`: safe conversion of Chroma `ids` / `embeddings`
+  (no `value or []` on ndarrays).
+- Symptom was pipeline failure at match with ambiguous array truth-value error.
+- Dependencies: no `requirements.txt` changes.
 
 ## [0.2.4] — Enable LinkedIn + Indeed by default
 

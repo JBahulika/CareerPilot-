@@ -8,6 +8,7 @@ content hash. Similarity is computed only within the requested candidate pool
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Any, Sequence
 
 import numpy as np
 
@@ -31,6 +32,22 @@ def _get_collection():
     )
 
 
+def _as_list(value: Any) -> list[Any]:
+    """Convert Chroma get() fields to a list without boolean-evaluating ndarrays.
+
+    Chroma may return ``ids`` / ``embeddings`` as NumPy arrays. Using
+    ``value or []`` raises: "The truth value of an array with more than one
+    element is ambiguous."
+    """
+    if value is None:
+        return []
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return list(value)
+    return list(value)
+
+
 def _cosine_similarity(query: list[float], vectors: list[list[float]]) -> list[float]:
     q = np.array(query, dtype=np.float32)
     mat = np.array(vectors, dtype=np.float32)
@@ -49,7 +66,7 @@ def index_jobs(jobs: list[JobListing]) -> None:
     existing: set[str] = set()
     try:
         got = collection.get(ids=ids, include=[])
-        existing = set(got.get("ids") or [])
+        existing = {str(i) for i in _as_list(got.get("ids"))}
     except Exception:  # noqa: BLE001
         existing = set()
 
@@ -86,9 +103,9 @@ def rank_by_similarity(query_text: str, hashes: list[str]) -> dict[str, float]:
         logger.warning(f"Chroma get failed, returning empty scores: {exc}")
         return {}
 
-    ids = result.get("ids") or []
-    embeddings = result.get("embeddings") or []
-    if not ids or embeddings is None or len(embeddings) == 0:
+    ids = [str(i) for i in _as_list(result.get("ids"))]
+    embeddings = _as_list(result.get("embeddings"))
+    if not ids or not embeddings:
         return {}
 
     sims = _cosine_similarity(query_embedding, embeddings)

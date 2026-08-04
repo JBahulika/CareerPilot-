@@ -33,7 +33,11 @@ from services.seniority import (
 from services.skills import (
     deterministic_skill_overlap,
     filter_matched_skills,
+    filter_missing_skills,
     has_unrelated_enterprise_stack,
+    is_sales_or_gtm_role,
+    is_senior_leadership_title,
+    profile_is_technical_ic,
 )
 from services.vector_store import index_jobs, rank_by_similarity
 from services.threshold import effective_min_match_score, filter_match_results
@@ -232,7 +236,9 @@ class SemanticMatcherAgent:
                 matched = filter_matched_skills(
                     profile, data.get("matched_skills", []) or []
                 )
-                missing = data.get("missing_skills", []) or []
+                missing = filter_missing_skills(
+                    profile, data.get("missing_skills", []) or []
+                )
                 reasons = data.get("reasons", []) or []
                 recommendation = self._to_recommendation(data.get("recommendation", ""))
             except Exception as exc:  # noqa: BLE001
@@ -259,7 +265,13 @@ class SemanticMatcherAgent:
                 "Low skill overlap with your profile — role may be unrelated."
             ]
 
-        if not level_ok:
+        # Hard seniority gate — entry candidates must not keep high LLM scores on senior roles
+        senior_mismatch = (
+            detail["job_tier"] >= 3 and detail["candidate_tier"] <= 1
+        ) or (
+            detail["candidate_tier"] <= 1 and is_senior_leadership_title(job)
+        )
+        if not level_ok or senior_mismatch:
             combined = min(combined, 20)
             recommendation = Recommendation.SKIP
             reasons = list(reasons) + [
@@ -269,6 +281,19 @@ class SemanticMatcherAgent:
                     f"{detail['job_label']} "
                     f"({detail['job_required_years']}+ yrs required)."
                 )
+            ]
+
+        # Sales / partner GTM roles are a poor fit for AI/ML IC profiles
+        if (
+            detail["candidate_tier"] <= 2
+            and is_sales_or_gtm_role(job)
+            and profile_is_technical_ic(profile)
+        ):
+            combined = min(combined, 25)
+            recommendation = Recommendation.SKIP
+            reasons = list(reasons) + [
+                "Role looks sales/pre-sales/partner-solutions oriented; "
+                "your profile reads as a technical IC (AI/ML) without sales domain."
             ]
 
         return MatchResult(
@@ -293,7 +318,11 @@ class SemanticMatcherAgent:
             "JOB:\n"
             f"{job.match_text()[:6000]}\n\n"
             "Only list matched_skills that appear verbatim or as clear synonyms "
-            "in the candidate skills list. Never invent skills the candidate lacks."
+            "in the candidate skills list. Never invent skills the candidate lacks. "
+            "missing_skills: tools/stacks/protocols/certs/years only — "
+            "never soft skills or sales process "
+            "(communication, English fluency, reliability, solution selling, "
+            "champion building, pre-sales/post-sales activities, etc.)."
         )
 
     @staticmethod

@@ -12,8 +12,12 @@ from services.seniority import (
 )
 
 
-def test_fresher_candidate_tier():
-    profile = UserProfile(experience_level="Fresher")
+def test_candidate_tier_prefers_target_years():
+    profile = UserProfile(
+        experience_level="5+ years",  # stale label
+        target_years_min=0,
+        target_years_max=1,
+    )
     assert infer_candidate_tier(profile) == 0
 
 
@@ -83,3 +87,60 @@ def test_zero_to_one_rejects_senior_jobs():
 def test_infer_job_tier_accepts_job_listing():
     job = JobListing(title="Lead Backend Engineer", description="")
     assert infer_job_tier(job) >= 4
+
+
+def test_matcher_caps_score_for_senior_vs_entry():
+    from agents.matcher_agent import SemanticMatcherAgent
+    from models.schemas import Recommendation
+
+    profile = UserProfile(
+        experience_level="0-1 years",
+        target_years_min=0,
+        target_years_max=1,
+        skills=["Python", "React"],
+    )
+    job = JobListing(
+        title="Senior React Full-stack Developer",
+        description="5+ years experience. Node.js, Ruby required.",
+        experience="Senior (5+ yrs)",
+    )
+    result = SemanticMatcherAgent()._score_job(
+        profile,
+        job,
+        embed_score=80,
+        skill_score=50,
+        rerank_score=75,
+        candidate_tier=0,
+        use_llm=False,
+    )
+    assert result.match_score <= 20
+    assert result.recommendation == Recommendation.SKIP
+
+def test_matcher_caps_principal_partner_solutions_for_entry_aiml():
+    from agents.matcher_agent import SemanticMatcherAgent
+    from models.schemas import Recommendation
+
+    profile = UserProfile(
+        experience_level='0-1 years',
+        target_years_min=0,
+        target_years_max=1,
+        skills=['Python', 'Machine Learning', 'Azure'],
+        preferred_roles=['AI Engineer', 'Machine Learning Engineer'],
+        role='AI/ML Developer',
+    )
+    job = JobListing(
+        title='Principal Partner Solutions Engineer, SAARC',
+        description='Pre-sales SASE SSE Azure. Solution selling required.',
+        experience='Lead / Staff',
+    )
+    result = SemanticMatcherAgent()._score_job(
+        profile,
+        job,
+        embed_score=80,
+        skill_score=60,
+        rerank_score=76,
+        candidate_tier=0,
+        use_llm=False,
+    )
+    assert result.match_score <= 25
+    assert result.recommendation == Recommendation.SKIP

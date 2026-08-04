@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     experience_flex_years: int = 1
     daily_recent_jobs_days: int = 2
     default_include_remote: bool = True
+    # Aggregate splits this across enabled boards (per_source = max(10, limit // n))
+    scrape_limit_max: int = 2000
 
     # Safe scrape HTTP (Phase 2) — polite delays; never solve captchas
     scrape_min_delay_ms: int = 400

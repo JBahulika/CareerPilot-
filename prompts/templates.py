@@ -60,7 +60,7 @@ return ONLY valid JSON matching this schema:
 {
   "match_score": integer,          // 0-100 overall fit
   "matched_skills": [string],      // candidate skills the job requires
-  "missing_skills": [string],      // job requirements the candidate lacks
+  "missing_skills": [string],      // technical gaps only (see rules)
   "reasons": [string],             // 2-4 short bullet reasons for the score
   "recommendation": string         // one of: "Highly Recommended", "Consider", "Skip"
 }
@@ -68,9 +68,16 @@ return ONLY valid JSON matching this schema:
 Rules:
 - Base the score on skills overlap, experience level, and role relevance.
 - matched_skills must come ONLY from the candidate's listed skills — never invent ABAP, SAP, or other skills not on the profile.
+- missing_skills must be ONLY concrete technical/professional requirements the candidate lacks: languages, frameworks, tools, clouds, libraries, certifications, or explicit years/seniority requirements.
+- Prefer short tokens (e.g. "Node.js", "TypeScript", "4+ years experience") — not full JD sentences.
+- Do NOT put soft skills or culture fluff in missing_skills: communication, English fluency, reliability, self-organization, teamwork, passion, culture-fit, "team player", etc.
+- Do NOT put sales/GTM process in missing_skills: solution selling, champion building, pre-sales/post-sales activities, partner enablement, quota, account management, etc.
+- DO list concrete tech gaps only (e.g. SASE, SSE, Azure, Databricks, Unity Catalog, MLflow, Node.js).
+- Do NOT list something as missing if the profile already shows it (e.g. English proficiency).
 - Experience level is critical: compare candidate seniority to job seniority.
 - If the job requires 2+ more years of experience than the candidate's target range, set match_score below 25 and recommendation to "Skip".
-- Senior, Lead, Principal, Staff, or Director roles are a poor fit for Fresher / 0-1 year candidates — recommend "Skip".
+- Senior, Lead, Principal, Staff, Partner, or Director roles are a poor fit for Fresher / 0-1 year candidates — recommend "Skip" and keep match_score below 25.
+- Pre-sales / Solutions Engineer / Partner sales roles are a poor fit for pure AI/ML IC profiles — recommend "Skip".
 - Unrelated enterprise stacks (ABAP, SAP, mainframe) when the candidate has no such skills → recommend "Skip".
 - Be honest about gaps; do not inflate scores.
 - Return JSON only, no commentary."""

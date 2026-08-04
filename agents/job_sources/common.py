@@ -13,7 +13,7 @@ from services.seniority import (
     infer_candidate_tier,
     is_job_compatible_with_profile,
 )
-from services.location import effective_location, location_filter_ok
+from services.location import effective_location, format_geo_query, location_filter_ok
 
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
 
@@ -80,7 +80,8 @@ def search_terms(profile: UserProfile) -> str:
 
 
 def search_location(profile: UserProfile) -> str:
-    return effective_location(profile)
+    pref = effective_location(profile)
+    return format_geo_query(pref) if pref else ""
 
 
 def sort_and_filter_recent(

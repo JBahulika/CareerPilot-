@@ -9,8 +9,8 @@ from models.schemas import JobListing, UserProfile
 # safety:
 #   api              — public JSON/API (preferred)
 #   scrape_safe      — HTML scrape, usually works without login walls
-#   scrape_risky     — often flaky / soft-gated
-#   disabled_captcha — frequent captcha/login challenges (may still be default-on best-effort)
+#   scrape_risky     — Playwright / flaky boards (best-effort, never solves captchas)
+#   disabled_captcha — reserved / unused for defaults (kept for health UI labels)
 POPULAR_JOB_SITES: list[dict[str, object]] = [
     {
         "id": "remotive",
@@ -89,45 +89,45 @@ POPULAR_JOB_SITES: list[dict[str, object]] = [
         "name": "Wellfound (AngelList)",
         "method": "scrape",
         "safety": "scrape_risky",
-        "enabled_by_default": False,
+        "enabled_by_default": True,
         "region": "global",
-        "notes": "Playwright scrape; soft gates common",
+        "notes": "Best-effort Playwright (pre–Phase 2 style)",
     },
     {
         "id": "naukri",
         "name": "Naukri",
         "method": "scrape",
         "safety": "scrape_risky",
-        "enabled_by_default": False,
+        "enabled_by_default": True,
         "region": "india",
-        "notes": "Playwright scrape; bot checks common",
+        "notes": "Best-effort Playwright (pre–Phase 2 style)",
     },
     {
         "id": "indeed",
         "name": "Indeed",
         "method": "scrape",
-        "safety": "disabled_captcha",
+        "safety": "scrape_risky",
         "enabled_by_default": True,
         "region": "global",
-        "notes": "Best-effort Playwright; abort on captcha_blocked; may fail without login",
+        "notes": "Best-effort Playwright; never solves captchas",
     },
     {
         "id": "linkedin",
         "name": "LinkedIn",
         "method": "scrape",
-        "safety": "disabled_captcha",
+        "safety": "scrape_risky",
         "enabled_by_default": True,
         "region": "global",
-        "notes": "Best-effort Playwright; abort on captcha_blocked; may fail without login; never bypass",
+        "notes": "Best-effort Playwright; never solves captchas",
     },
     {
         "id": "glassdoor",
         "name": "Glassdoor",
         "method": "scrape",
-        "safety": "disabled_captcha",
-        "enabled_by_default": False,
+        "safety": "scrape_risky",
+        "enabled_by_default": True,
         "region": "global",
-        "notes": "Frequent bot checks — off by default",
+        "notes": "Best-effort Playwright; never solves captchas",
     },
 ]
 

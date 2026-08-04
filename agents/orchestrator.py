@@ -78,6 +78,7 @@ _pdf = PDFGeneratorAgent()
 def _scrape_node(state: PipelineState) -> PipelineState:
     update_run(state["run_id"], status=RunStatus.RUNNING.value, current_step="scrape")
     profile = _resolve_profile(state)
+    summary = dict(state.get("run_summary") or {})
     try:
         jobs = _scraper.run(
             profile,
@@ -88,11 +89,32 @@ def _scrape_node(state: PipelineState) -> PipelineState:
             recent_days=state.get("recent_days"),
         )
         upsert_jobs(jobs)
-        update_run(state["run_id"], jobs_scraped=len(jobs))
-        return {"jobs": jobs, "current_step": "scrape"}
+        scrape_report = dict(getattr(_scraper, "last_scrape_report", None) or {})
+        summary["scrape"] = scrape_report
+        update_run(
+            state["run_id"],
+            jobs_scraped=len(jobs),
+            summary_json=summary,
+        )
+        return {
+            "jobs": jobs,
+            "current_step": "scrape",
+            "run_summary": summary,
+        }
     except Exception as exc:  # noqa: BLE001
         logger.error(f"Scrape failed: {exc}")
-        return {"jobs": [], "errors": state.get("errors", []) + [f"scrape: {exc}"]}
+        summary["scrape"] = {
+            "mode": state.get("source") or "all",
+            "per_source": [],
+            "sources_error": ["scrape"],
+            "detail": str(exc)[:300],
+        }
+        update_run(state["run_id"], summary_json=summary)
+        return {
+            "jobs": [],
+            "errors": state.get("errors", []) + [f"scrape: {exc}"],
+            "run_summary": summary,
+        }
 
 
 def _filter_node(state: PipelineState) -> PipelineState:

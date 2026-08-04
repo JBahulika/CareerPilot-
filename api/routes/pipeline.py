@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from agents.orchestrator import run_pipeline
 from core.config import settings
@@ -25,7 +25,7 @@ class RunRequest(BaseModel):
     profile_id: int
     top_n: int = settings.top_n_jobs
     source: Optional[str] = None
-    scrape_limit: int = 100
+    scrape_limit: int = Field(default=100, ge=1, le=settings.scrape_limit_max)
     exclude_internships: bool = False
     strict_experience: bool = True
     allow_stretch: bool = False
