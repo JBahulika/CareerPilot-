@@ -1,12 +1,12 @@
 #!/bin/sh
-# Auto-commit and push to GitHub when files change.
+# Auto-commit (and optionally push) on file changes.
 #
-# Install once (macOS):
+# Install gitwatch once (macOS):
 #   brew install gitwatch
 #
 # Usage:
 #   ./scripts/start-gitwatch.sh          # commit only
-#   ./scripts/start-gitwatch.sh --push   # commit + push to origin (GitHub)
+#   ./scripts/start-gitwatch.sh --push   # commit + push to origin
 
 set -e
 cd "$(dirname "$0")/.."
@@ -20,20 +20,14 @@ fi
 git config core.hooksPath .githooks
 
 ROOT="$(pwd)"
-chmod +x "$ROOT/.githooks/prepare-commit-msg" 2>/dev/null || true
-chmod +x "$ROOT/scripts/gitwatch-commit-msg.sh" 2>/dev/null || true
+MSG_SCRIPT="$ROOT/scripts/gitwatch-commit-msg.sh"
+chmod +x "$MSG_SCRIPT" "$ROOT/.githooks/prepare-commit-msg" 2>/dev/null || true
 
-PUSH=0
+PUSH_REMOTE=""
 if [ "$1" = "--push" ]; then
-  PUSH=1
-  echo "gitwatch: auto-commit + push to origin on every save"
-else
-  echo "gitwatch: auto-commit only (pass --push to also push to GitHub)"
+  PUSH_REMOTE="-r origin"
+  echo "gitwatch: will push to origin after each commit"
 fi
 
 echo "Watching $ROOT (Ctrl+C to stop)"
-if [ "$PUSH" = "1" ]; then
-  exec gitwatch -f -r origin -m "Update" .
-else
-  exec gitwatch -f -m "Update" .
-fi
+exec gitwatch -c "$MSG_SCRIPT" -C $PUSH_REMOTE "$ROOT"

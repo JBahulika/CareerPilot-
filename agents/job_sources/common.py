@@ -5,49 +5,17 @@ from __future__ import annotations
 import hashlib
 import re
 from datetime import datetime, timedelta
-from urllib.parse import quote_plus, urlparse
-
-import requests
 
 from core.config import settings
-from core.logging import get_logger
 from models.schemas import JobListing, UserProfile
-from services.location import (
-    effective_location,
-    is_remote_location,
-    location_filter_ok,
-)
 from services.seniority import (
     experience_label_for_job,
+    infer_candidate_tier,
     is_job_compatible_with_profile,
 )
-
-logger = get_logger(__name__)
+from services.location import effective_location, location_filter_ok
 
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
-_WHITESPACE_RE = re.compile(r"\s+")
-
-# One pooled session for all API adapters — reuses TCP connections and applies
-# a consistent, polite User-Agent. Much faster than a fresh connection per call.
-_SESSION = requests.Session()
-_SESSION.headers.update(
-    {
-        "User-Agent": (
-            "CareerPilot/1.0 (+https://github.com/JBahulika/CareerPilot-)"
-        ),
-        "Accept": "application/json",
-    }
-)
-
-_DEFAULT_TIMEOUT = 30
-
-
-def http_get(url: str, *, params: dict | None = None, timeout: int = _DEFAULT_TIMEOUT,
-             headers: dict | None = None) -> requests.Response:
-    """Shared GET with pooled connections and sane defaults."""
-    resp = _SESSION.get(url, params=params, timeout=timeout, headers=headers)
-    resp.raise_for_status()
-    return resp
 
 
 def content_hash(company: str, title: str, description: str) -> str:
@@ -56,57 +24,7 @@ def content_hash(company: str, title: str, description: str) -> str:
 
 
 def strip_html(text: str) -> str:
-    cleaned = _HTML_TAG_RE.sub(" ", text or "").replace("&nbsp;", " ")
-    return _WHITESPACE_RE.sub(" ", cleaned).strip()
-
-
-def _is_valid_url(url: str) -> bool:
-    try:
-        parsed = urlparse(url)
-        return parsed.scheme in ("http", "https") and bool(parsed.netloc)
-    except ValueError:
-        return False
-
-
-def normalize_apply_url(url: str, *, base: str = "") -> str:
-    """Return an absolute http(s) URL, or "" when one cannot be built.
-
-    Handles absolute URLs, root-relative paths, and bare slugs (joined onto the
-    source's base URL). Anything that cannot be resolved returns "".
-    """
-    url = (url or "").strip()
-    if not url:
-        return ""
-    if _is_valid_url(url):
-        return url
-    base = (base or "").rstrip("/")
-    if not base:
-        return ""
-    if url.startswith("/"):
-        candidate = f"{base}{url}"
-    else:
-        candidate = f"{base}/{url.lstrip('/')}"
-    return candidate if _is_valid_url(candidate) else ""
-
-
-def search_fallback_url(company: str, title: str) -> str:
-    """A guaranteed link so the user can always reach the posting.
-
-    Used when a source does not expose a usable apply URL. Points at a Google
-    search scoped to the exact role + company.
-    """
-    query = " ".join(p for p in (title, company, "job apply") if p).strip()
-    if not query:
-        return ""
-    return f"https://www.google.com/search?q={quote_plus(query)}"
-
-
-def ensure_apply_url(url: str, *, base: str, company: str, title: str) -> str:
-    """Normalize the URL, falling back to a scoped search when none is usable."""
-    normalized = normalize_apply_url(url, base=base)
-    if normalized:
-        return normalized
-    return search_fallback_url(company, title)
+    return _HTML_TAG_RE.sub(" ", text or "").replace("&nbsp;", " ").strip()
 
 
 def parse_posted_at(value: str | None) -> datetime | None:
@@ -131,15 +49,34 @@ def parse_posted_at(value: str | None) -> datetime | None:
 
 
 def search_terms(profile: UserProfile) -> str:
-    """Single string for scrapers that accept one query (legacy)."""
-    queries = search_queries(profile)
-    return queries[0] if queries else "software engineer"
+    from services.skills import role_search_terms
 
-
-def search_queries(profile: UserProfile) -> list[str]:
-    from services.skills import search_queries as _queries
-
-    return _queries(profile)
+    roles = role_search_terms(profile)
+    base = " ".join(roles)
+    skill_blob = " ".join(profile.skills).lower()
+    aiml_boost: list[str] = []
+    if any(
+        k in skill_blob
+        for k in (
+            "pytorch",
+            "tensorflow",
+            "langchain",
+            "langgraph",
+            "llm",
+            "machine learning",
+            "deep learning",
+            "nlp",
+            "computer vision",
+        )
+    ):
+        aiml_boost = ["AI engineer", "machine learning engineer", "ML engineer"]
+    tier = infer_candidate_tier(profile)
+    parts = [base, *aiml_boost]
+    if tier <= 1:
+        parts.append("junior entry level graduate")
+    elif tier == 2:
+        parts.append("mid level")
+    return " ".join(dict.fromkeys(p for p in parts if p))
 
 
 def search_location(profile: UserProfile) -> str:
@@ -167,54 +104,21 @@ def annotate_and_filter_jobs(
     *,
     allow_stretch: bool = False,
     flex_years: int | None = None,
-    apply_experience: bool = True,
-    apply_location: bool = True,
 ) -> list[JobListing]:
     kept: list[JobListing] = []
     pref = search_location(profile)
     for job in jobs:
         job.experience = experience_label_for_job(job)
-        if apply_experience and not is_job_compatible_with_profile(
+        if not is_job_compatible_with_profile(
             job, profile, allow_stretch=allow_stretch, flex_years=flex_years
         ):
             continue
-        if apply_location and not location_filter_ok(
+        if not location_filter_ok(
             job, pref, include_remote=profile.include_remote
         ):
             continue
         kept.append(job)
     return kept
-
-
-def prepare_scraped_jobs(
-    jobs: list[JobListing], profile: UserProfile | None = None
-) -> list[JobListing]:
-    """Label seniority, apply domain relevance, then rank by fit + recency.
-
-    When a profile is given, each job gets a deterministic ``relevance_score``
-    and the list is returned best-first so the matcher sees the strongest
-    candidates first. Recency filtering still applies.
-    """
-    from services.skills import is_relevant_job_posting
-
-    for job in jobs:
-        job.experience = experience_label_for_job(job)
-
-    if profile is None:
-        return sort_and_filter_recent(jobs)
-
-    jobs = [j for j in jobs if is_relevant_job_posting(j, profile)]
-    jobs = sort_and_filter_recent(jobs)
-
-    from services.scoring import relevance_score
-
-    for job in jobs:
-        job.relevance_score = relevance_score(job, profile)
-    jobs.sort(
-        key=lambda j: (j.relevance_score, j.posted_at or j.scraped_at or datetime.min),
-        reverse=True,
-    )
-    return jobs
 
 
 def build_job(
@@ -228,28 +132,21 @@ def build_job(
     salary: str = "",
     apply_url: str = "",
     posted_at: datetime | None = None,
-    job_type: str = "",
-    remote: bool | None = None,
-    apply_base: str = "",
 ) -> JobListing:
+    from services.job_text import enrich_job_listing
+
     now = datetime.utcnow()
-    company = (company or "").strip()
-    title = (title or "").strip()
-    is_remote = remote if remote is not None else is_remote_location(location)
-    return JobListing(
+    job = JobListing(
         source=source,
         company=company,
         title=title,
         description=description,
-        skills=[s.strip() for s in (skills or []) if s and s.strip()],
-        location=location.strip(),
-        salary=str(salary or "").strip(),
-        apply_url=ensure_apply_url(
-            apply_url, base=apply_base, company=company, title=title
-        ),
-        job_type=(job_type or "").strip(),
-        remote=is_remote,
+        skills=skills or [],
+        location=location,
+        salary=salary,
+        apply_url=apply_url,
         content_hash=content_hash(company, title, description),
         posted_at=posted_at or now,
         scraped_at=now,
     )
+    return enrich_job_listing(job)

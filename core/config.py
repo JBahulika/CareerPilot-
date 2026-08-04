@@ -22,17 +22,28 @@ class Settings(BaseSettings):
 
     # Ollama (local LLM)
     ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "qwen2.5:14b"
+    ollama_model: str = "qwen2.5:7b"
 
-    # Embeddings
-    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    # Embeddings & matching accuracy
+    embedding_model: str = "BAAI/bge-base-en-v1.5"
+    reranker_model: str = "BAAI/bge-reranker-base"
+    reranker_enabled: bool = True
+    hybrid_search_enabled: bool = True
+    hybrid_vector_weight: float = 0.65
+    matcher_recall_top_n: int = 50
+    matcher_rerank_top_n: int = 20
+    matcher_llm_top_n: int = 8
+    score_weight_embed: float = 0.15
+    score_weight_skill: float = 0.25
+    score_weight_rerank: float = 0.45
+    score_weight_llm: float = 0.15
 
     # Pipeline
     top_n_jobs: int = 10
     job_source: str = "all"  # "all" | remotive | wellfound | indeed | ...
     display_page_size: int = 10
     max_page_size: int = 15
-    recent_jobs_days: int = 7
+    recent_jobs_days: int = 3
     experience_flex_years: int = 1
     daily_recent_jobs_days: int = 2
     default_include_remote: bool = True

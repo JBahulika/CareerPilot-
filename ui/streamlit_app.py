@@ -8,25 +8,12 @@ A thin client over the FastAPI backend. Run the API first, then:
 from __future__ import annotations
 
 import os
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
 import httpx
 import streamlit as st
-
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
-from models.schemas import UserProfile
-from services.job_fields import (
-    JOB_FIELD_OPTIONS,
-    effective_fields,
-    field_labels,
-    infer_fields_from_profile,
-)
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
@@ -60,9 +47,6 @@ _EXPERIENCE_YEAR_DEFAULTS = {
     "3-5 years": (3, 5),
     "5+ years": (5, 15),
 }
-
-_FIELD_IDS = [opt["id"] for opt in JOB_FIELD_OPTIONS]
-_FIELD_LABELS = {opt["id"]: opt["label"] for opt in JOB_FIELD_OPTIONS}
 
 
 def _api_reachable() -> bool:
@@ -155,7 +139,7 @@ def page_setup() -> None:
         else:
             st.warning(status.get("message"))
             st.code(
-                "ollama pull qwen2.5:14b\n"
+                "ollama pull qwen2.5:7b\n"
                 "# On Mac, open the Ollama app — no need to run ollama serve"
             )
     except Exception as exc:  # noqa: BLE001
@@ -199,9 +183,6 @@ def page_profile() -> None:
 
     st.write("**Skills:** " + (", ".join(profile.get("skills", [])) or "—"))
     st.write("**Preferred roles:** " + (", ".join(profile.get("preferred_roles", [])) or "—"))
-    profile_obj = UserProfile.model_validate(profile)
-    display_fields = field_labels(effective_fields(profile_obj))
-    st.write("**Job fields:** " + (", ".join(display_fields) or "—"))
 
     st.divider()
     st.subheader("Your search preferences")
@@ -236,16 +217,6 @@ def page_profile() -> None:
     st.caption(
         f"**{selected_level}** → target **{ymin}–{ymax} years**. "
         "Jobs outside this band are dropped unless stretch is enabled."
-    )
-
-    stored_fields = [f for f in profile.get("preferred_fields", []) if f in _FIELD_IDS]
-    default_fields = stored_fields or infer_fields_from_profile(profile_obj)
-    selected_fields = st.multiselect(
-        "Job fields",
-        options=_FIELD_IDS,
-        default=[f for f in default_fields if f in _FIELD_IDS],
-        format_func=lambda fid: _FIELD_LABELS[fid],
-        help="Pick one or more domains. Jobs matching ANY selected field are included.",
     )
 
     preferred_loc = st.text_input(
@@ -286,7 +257,6 @@ def page_profile() -> None:
         profile["experience_level"] = selected_level
         profile["target_years_min"] = int(ymin)
         profile["target_years_max"] = int(ymax)
-        profile["preferred_fields"] = selected_fields
         profile["preferred_location"] = preferred_loc.strip()
         profile["include_remote"] = include_remote
         profile["strict_experience"] = strict_experience
@@ -316,11 +286,9 @@ Settings come from your **Profile** (experience, location, strict/stretch rules)
 
     loc = profile.get("preferred_location") or profile.get("location") or "Any"
     remote = "yes" if profile.get("include_remote", True) else "no"
-    fields_text = ", ".join(field_labels(effective_fields(UserProfile.model_validate(profile))))
     st.info(
         f"Using profile: **{profile.get('experience_level')}** "
         f"({profile.get('target_years_min', 0)}–{profile.get('target_years_max', 1)} yrs) · "
-        f"fields: **{fields_text or '—'}** · "
         f"roles: {', '.join(profile.get('preferred_roles', [])[:3]) or profile.get('role', '—')} · "
         f"location: **{loc}** · remote: **{remote}** · "
         f"strict: **{'on' if profile.get('strict_experience', True) else 'off'}** · "
@@ -356,9 +324,9 @@ Settings come from your **Profile** (experience, location, strict/stretch rules)
         recent_days = st.slider(
             "Only jobs posted in last N days",
             1,
-            30,
-            7,
-            help="7 days recommended. Very low values (1-3) often return zero AIML jobs.",
+            14,
+            3,
+            help="Lower = fresher listings. Morning scan uses 2 days.",
         )
 
     if st.button("Run pipeline", type="primary"):
@@ -382,41 +350,18 @@ Settings come from your **Profile** (experience, location, strict/stretch rules)
             return
         run_id = resp.json()["run_id"]
         st.session_state["run_id"] = run_id
-        _poll_run(run_id, top_n=int(top_n))
+        _poll_run(run_id)
 
 
-def _poll_timeout_seconds(top_n: int) -> int:
-    """Allow enough time for local LLM tailoring (~2–3 min per resume)."""
-    return max(1800, 300 + top_n * 180)
-
-
-def _step_progress(step: str) -> float:
-    steps = {"scrape": 0.2, "filter": 0.4, "match": 0.6, "tailor": 0.85, "complete": 1.0}
-    if step.startswith("tailor"):
-        if "(" in step and "/" in step:
-            try:
-                done, total = step.split("(")[1].split(")")[0].split("/")
-                total_n = max(int(total), 1)
-                return 0.7 + (int(done) / total_n) * 0.25
-            except (ValueError, IndexError):
-                pass
-        return steps["tailor"]
-    return steps.get(step, 0.05)
-
-
-def _poll_run(run_id: int, *, top_n: int = 10) -> None:
+def _poll_run(run_id: int) -> None:
     progress = st.progress(0.0)
     status_box = st.empty()
-    timeout_sec = _poll_timeout_seconds(top_n)
-    st.caption(
-        f"Tailoring uses your local Ollama model — expect ~2–3 min per resume. "
-        f"Waiting up to {timeout_sec // 60} min for {top_n} job(s)."
-    )
+    steps = {"scrape": 0.2, "filter": 0.4, "match": 0.6, "tailor": 0.85, "complete": 1.0}
 
-    for _ in range(timeout_sec):
+    for _ in range(600):
         run = api_get(f"/pipeline/runs/{run_id}").json()
         step = run.get("current_step", "")
-        progress.progress(_step_progress(step))
+        progress.progress(steps.get(step, 0.05))
         status_box.info(
             f"Status: {run['status']} | step: {step or 'starting'} | "
             f"scraped {run['jobs_scraped']} | matched {run['jobs_matched']} | "
@@ -425,30 +370,14 @@ def _poll_run(run_id: int, *, top_n: int = 10) -> None:
         if run["status"] in ("completed", "failed"):
             progress.progress(1.0)
             if run["status"] == "completed":
-                if run.get("jobs_matched", 0) == 0:
-                    st.warning(
-                        "Pipeline finished but found **no matching jobs**. "
-                        "See the message below and try another source or wider settings."
-                    )
-                else:
-                    st.success("Pipeline complete. See the Results page.")
+                st.success("Pipeline complete. See the Results page.")
             else:
                 st.error("Pipeline failed.")
             if run.get("errors"):
-                st.info("\n".join(run["errors"]))
+                st.warning("\n".join(run["errors"]))
             return
         time.sleep(1.0)
-
-    run = api_get(f"/pipeline/runs/{run_id}").json()
-    if run.get("status") == "running":
-        st.warning(
-            f"UI stopped waiting after {timeout_sec // 60} min, but run **#{run_id}** "
-            f"is still **{run.get('current_step', 'running')}** in the background "
-            f"({run.get('pdfs_generated', 0)} PDFs so far). "
-            "Check **History** or **Results** in a few minutes, or lower **Top N**."
-        )
-    else:
-        st.warning("Timed out waiting for the pipeline.")
+    st.warning("Timed out waiting for the pipeline.")
 
 
 def _format_posted_ago(iso_value: str | None) -> str:
