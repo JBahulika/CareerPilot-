@@ -11,6 +11,10 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 correct version heading (or `[Unreleased]` until release). Also add a short
 bullet in [`docs/UPGRADE_NOTES.md`](docs/UPGRADE_NOTES.md).
 
+Ship each phase on its own branch (`phase-N-…`), merge to `main`, and **keep the
+phase branch** on GitHub as a backup. Update `README.md` and `requirements.txt`
+every phase (or explicitly note “no dependency changes”).
+
 Do not ship feature work without a changelog line.
 
 ## [Unreleased]
@@ -20,6 +24,11 @@ Do not ship feature work without a changelog line.
 - Phase 2+: safe scrape layer, more API sources, WhatsApp/email digests, proxies,
   optional cookies, dedupe, skills-gap / cover-letter on user select — see
   `docs/UPGRADE_NOTES.md`.
+
+### Docs
+
+- Per-phase shipping checklist: dedicated branch backup, README + requirements.txt
+  required each phase (`docs/UPGRADE_NOTES.md`).
 
 ## [0.2.1] — 2026-08-05
 
@@ -36,6 +45,10 @@ Do not ship feature work without a changelog line.
 
 - `JobFilterAgent.run` returns `FilterResult` (jobs + exclusions) for transparency.
 - Matcher applies min score before Top-N truncation.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
 
 ## [0.2.0] — 2026-08-05
 
@@ -60,9 +73,12 @@ branch `contributor/local-matching-upgrades` for GitHub sync):
 
 ### Notes
 
-- Upstream GitHub `main` may lag this workspace until the contributor branch
-  (or equivalent) is merged. Prefer this changelog + `VERSION` as the source of
-  truth for what the tree claims to be.
+- Matching upgrades from `contributor/local-matching-upgrades` are on `main`.
+- Phase backups: keep `phase-0-upgrade-notes` / `phase-1-match-threshold` branches.
+
+### Dependencies
+
+- No dependency changes for Phase 0 docs/guardrails (`requirements.txt` unchanged).
 
 ## [0.1.0] — prior
 
