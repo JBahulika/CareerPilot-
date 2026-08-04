@@ -39,15 +39,12 @@ def test_remotive_parses_fixture(monkeypatch):
         ]
     }
 
-    class _Resp:
-        def raise_for_status(self):
-            pass
-
-        def json(self):
+    class _Client:
+        def get_json(self, *a, **k):
             return fixture
 
     monkeypatch.setattr(
-        "agents.job_sources.api_sources.requests.get", lambda *a, **k: _Resp()
+        "agents.job_sources.api_sources.get_scrape_client", lambda: _Client()
     )
 
     jobs = RemotiveSource().fetch(

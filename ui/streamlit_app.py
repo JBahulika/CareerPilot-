@@ -131,6 +131,35 @@ def page_setup() -> None:
     except Exception as exc:  # noqa: BLE001
         st.warning(f"Could not load scheduler status: {exc}")
 
+    st.subheader("Job source health")
+    st.caption(
+        "Polite scrape client aborts on captcha/challenge pages "
+        "(never solves them). Statuses: ok, rate_limited, captcha_blocked, disabled, error."
+    )
+    try:
+        health_resp = api_get("/jobs/sources/health").json()
+        rows = health_resp.get("sources", [])
+        if rows:
+            st.dataframe(
+                [
+                    {
+                        "source": r.get("source_id"),
+                        "status": r.get("status"),
+                        "detail": r.get("detail") or "",
+                        "updated": r.get("updated_at") or "",
+                    }
+                    for r in rows
+                ],
+                use_container_width=True,
+            )
+            st.caption(
+                f"Cooldowncha/rate-limit cooldown: {health_resp.get('cooldown_seconds', 1800)}s"
+            )
+        else:
+            st.info("No source health recorded yet — run the pipeline once.")
+    except Exception as exc:  # noqa: BLE001
+        st.warning(f"Could not load source health: {exc}")
+
     st.subheader("Local AI (Ollama)")
     try:
         status = api_get("/ollama/status").json()

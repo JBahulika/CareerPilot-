@@ -21,14 +21,30 @@ Do not ship feature work without a changelog line.
 
 ### Planned (phased roadmap)
 
-- Phase 2+: safe scrape layer, more API sources, WhatsApp/email digests, proxies,
-  optional cookies, dedupe, skills-gap / cover-letter on user select — see
-  `docs/UPGRADE_NOTES.md`.
+- Phase 3+: more safe sources, WhatsApp/email digests, proxies, optional cookies,
+  dedupe, skills-gap / cover-letter — see `docs/UPGRADE_NOTES.md`.
 
-### Docs
+## [0.2.2] — 2026-08-05
 
-- Per-phase shipping checklist: dedicated branch backup, README + requirements.txt
-  required each phase (`docs/UPGRADE_NOTES.md`).
+### Added
+
+- Shared safe scrape HTTP client (`services/scrape_http.py`): browser-like headers,
+  jitter delays, concurrency limit, retries on 429/5xx.
+- Captcha/challenge detection aborts the source (`captcha_blocked`) — never solved.
+- Source health registry + `GET /jobs/sources/health`; Setup page health table.
+- Config: `SCRAPE_MIN_DELAY_MS`, `SCRAPE_MAX_DELAY_MS`, `SCRAPE_MAX_CONCURRENCY`,
+  `SCRAPE_MAX_RETRIES`, `SCRAPE_HEALTH_COOLDOWN_SECONDS`.
+- Unit tests in `tests/test_scrape_http.py`.
+
+### Changed
+
+- API job sources use the shared client instead of bare `requests`.
+- Playwright scrapers use browser UA/headers, jitter, and captcha abort.
+- Aggregate skips sources temporarily blocked by captcha/rate-limit cooldown.
+
+### Dependencies
+
+- No dependency changes (`httpx` already required).
 
 ## [0.2.1] — 2026-08-05
 
