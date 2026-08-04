@@ -125,6 +125,13 @@ def save_matches(run_id: int, matches: list[MatchResult], job_ids: dict[str, int
                 matched_skills_json=match.matched_skills,
                 missing_skills_json=match.missing_skills,
                 reasons_json=match.reasons,
+                scores_json={
+                    "embed_score": match.embed_score,
+                    "skill_score": match.skill_score,
+                    "rerank_score": match.rerank_score,
+                    "llm_score": match.llm_score,
+                    "seniority_compatible": match.seniority_compatible,
+                },
                 recommendation=match.recommendation.value,
                 generated_pdf_path=match.generated_pdf_path or "",
             )
@@ -164,6 +171,7 @@ def get_matches_for_run(
                     "apply_url": job_row.apply_url,
                     "posted_at": posted.isoformat() if posted else None,
                     "match_score": match_row.match_score,
+                    "scores": match_row.scores_json or {},
                     "matched_skills": match_row.matched_skills_json,
                     "missing_skills": match_row.missing_skills_json,
                     "reasons": match_row.reasons_json,
@@ -200,22 +208,6 @@ def finish_run(run_id: int, status: str, errors: list[str]) -> None:
         errors_json=errors,
         finished_at=datetime.utcnow(),
     )
-
-
-def mark_stale_runs_failed() -> int:
-    """Mark runs left in ``running`` after an API restart as failed."""
-    with get_session() as session:
-        rows = session.exec(
-            select(PipelineRunRow).where(PipelineRunRow.status == "running")
-        ).all()
-        for row in rows:
-            row.status = "failed"
-            row.errors_json = (row.errors_json or []) + [
-                "Run interrupted (API restarted or process stopped)."
-            ]
-            row.finished_at = datetime.utcnow()
-            session.add(row)
-        return len(rows)
 
 
 def get_run(run_id: int) -> Optional[dict]:

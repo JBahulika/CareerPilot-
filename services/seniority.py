@@ -7,6 +7,7 @@ matcher to keep entry-level candidates from receiving senior roles.
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from typing import Union
 
 from models.schemas import JobListing, UserProfile
@@ -158,27 +159,65 @@ def _parse_years_from_level(level: str) -> int | None:
     return None
 
 
+def _parse_year_month(value: str) -> tuple[int, int] | None:
+    """Parse YYYY-MM or YYYY from structured date fields."""
+    if not value:
+        return None
+    text = value.strip()
+    ym = re.match(r"^(20\d{2})-(\d{1,2})$", text)
+    if ym:
+        return int(ym.group(1)), int(ym.group(2))
+    y = re.match(r"^(20\d{2})$", text)
+    if y:
+        return int(y.group(1)), 1
+    return None
+
+
+def _months_from_structured_dates(profile: UserProfile) -> int | None:
+    """Sum experience months from start_date/end_date when present."""
+    total = 0
+    found = False
+    now = datetime.utcnow()
+    for exp in profile.experience:
+        start = _parse_year_month(exp.start_date)
+        if start is None:
+            continue
+        found = True
+        if exp.is_current or not exp.end_date:
+            end = (now.year, now.month)
+        else:
+            parsed_end = _parse_year_month(exp.end_date)
+            end = parsed_end or (now.year, now.month)
+        months = (end[0] - start[0]) * 12 + (end[1] - start[1])
+        total += max(0, months)
+    return total if found else None
+
+
 def _years_from_work_history(profile: UserProfile) -> int | None:
     """Estimate tier from listed work experience count and duration hints."""
     if not profile.experience:
         return 0 if profile.education else None
 
-    total_months = 0
-    for exp in profile.experience:
-        duration = (exp.duration or "").lower()
-        year_matches = re.findall(r"(20\d{2})", duration)
-        if len(year_matches) >= 2:
-            total_months += (int(year_matches[-1]) - int(year_matches[0])) * 12
-            continue
-        month_match = re.search(r"(\d+)\s*months?", duration)
-        if month_match:
-            total_months += int(month_match.group(1))
-            continue
-        year_match = re.search(r"(\d+)\s*years?", duration)
-        if year_match:
-            total_months += int(year_match.group(1)) * 12
-            continue
-        total_months += 12
+    structured_months = _months_from_structured_dates(profile)
+    if structured_months is not None:
+        total_months = structured_months
+    else:
+        total_months = 0
+        for exp in profile.experience:
+            duration = (exp.duration or "").lower()
+            year_matches = re.findall(r"(20\d{2})", duration)
+            if len(year_matches) >= 2:
+                total_months += (int(year_matches[-1]) - int(year_matches[0])) * 12
+                continue
+            month_match = re.search(r"(\d+)\s*months?", duration)
+            if month_match:
+                total_months += int(month_match.group(1))
+                continue
+            year_match = re.search(r"(\d+)\s*years?", duration)
+            if year_match:
+                total_months += int(year_match.group(1)) * 12
+                continue
+            total_months += 12
 
     years = total_months / 12
     if years <= 1:
