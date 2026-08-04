@@ -33,6 +33,7 @@ class RunRequest(BaseModel):
     recent_days: Optional[int] = None
     location: Optional[str] = None
     include_remote: Optional[bool] = None
+    min_match_score: Optional[int] = None  # per-run override; None = profile/default
 
 
 @router.post("/run")
@@ -56,6 +57,7 @@ def start_pipeline(request: RunRequest, background_tasks: BackgroundTasks) -> di
         recent_days=request.recent_days,
         location=request.location,
         include_remote=request.include_remote,
+        min_match_score=request.min_match_score,
     )
     return {"run_id": run_id, "status": "pending"}
 

@@ -16,7 +16,12 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 
-def format_digest(matches: list[dict], profile_name: str = "") -> str:
+def format_digest(
+    matches: list[dict],
+    profile_name: str = "",
+    *,
+    min_match_score: int | None = None,
+) -> str:
     """Build a morning digest with fresh jobs and tailored resume paths."""
     from datetime import datetime
 
@@ -25,6 +30,8 @@ def format_digest(matches: list[dict], profile_name: str = "") -> str:
     header = f"CareerPilot — {count} new match{'es' if count != 1 else ''} ({stamp})"
     if profile_name:
         header = f"{header}\nFor {profile_name}"
+    if min_match_score is not None:
+        header = f"{header}\nMin match score: {min_match_score}%"
 
     if count == 0:
         return f"{header}\n\nNo new matching jobs this morning. Check back after the next scan."
@@ -35,6 +42,8 @@ def format_digest(matches: list[dict], profile_name: str = "") -> str:
         title = match.get("title", "Role")
         score = match.get("match_score", 0)
         lines.append(f"{idx}. {title} @ {company} — {score}% match")
+        if match.get("location"):
+            lines.append(f"   Location: {match['location']}")
         if match.get("posted_at"):
             lines.append(f"   Posted: {match['posted_at'][:10]}")
         if match.get("apply_url"):
@@ -46,7 +55,7 @@ def format_digest(matches: list[dict], profile_name: str = "") -> str:
         if skills:
             lines.append(f"   Skills: {', '.join(skills[:5])}")
         lines.append("")
-    lines.append("— Sent by CareerPilot AI")
+    lines.append("— Sent by CareerPilot AI (you choose what to apply to)")
     return "\n".join(lines).strip()
 
 

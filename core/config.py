@@ -40,6 +40,7 @@ class Settings(BaseSettings):
 
     # Pipeline
     top_n_jobs: int = 10
+    min_match_score: int = 60  # 0–100; profile/run can override
     job_source: str = "all"  # "all" | remotive | wellfound | indeed | ...
     display_page_size: int = 10
     max_page_size: int = 15

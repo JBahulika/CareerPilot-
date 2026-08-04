@@ -1,6 +1,6 @@
 # CareerPilot AI
 
-**Version [`0.2.0`](VERSION)** · [Changelog](CHANGELOG.md) · [Upgrade notes](docs/UPGRADE_NOTES.md) · [Legal stance](docs/LEGAL.md)
+**Version [`0.2.1`](VERSION)** · [Changelog](CHANGELOG.md) · [Upgrade notes](docs/UPGRADE_NOTES.md) · [Legal stance](docs/LEGAL.md)
 
 An autonomous, **local-first** AI assistant that discovers relevant jobs, scores
 them against your resume, and generates ATS-friendly tailored resumes — all on
@@ -98,6 +98,7 @@ Then in the dashboard:
 All settings live in `.env` (see [`.env.example`](.env.example)):
 
 - `OLLAMA_MODEL` — local model tag (default `qwen2.5:7b`).
+- `MIN_MATCH_SCORE` — default minimum match % (0–100, default `60`); Profile can override.
 - `JOB_SOURCE` — `all` (default, aggregates every source below) or a single site id.
 - `EXPERIENCE_FLEX_YEARS` — +/- years around your target range when matching jobs.
 - `DEFAULT_INCLUDE_REMOTE` — include remote jobs when filtering by location (default `true`).

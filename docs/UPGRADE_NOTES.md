@@ -13,13 +13,21 @@ Human-oriented summary of what changed between versions. Keep this in sync with
 
 ## Models pin (update when defaults change)
 
-| Component | Current default (0.2.0) |
+| Component | Current default (0.2.1) |
 |-----------|-------------------------|
 | Ollama LLM | `qwen2.5:7b` |
 | Embeddings | `BAAI/bge-base-en-v1.5` |
 | Reranker | `BAAI/bge-reranker-base` (enabled) |
+| Min match score | `60` (user-settable) |
 
 Source of truth for runtime knobs: `core/config.py` (mirrored in `.env.example`).
+
+## [0.2.1] — Phase 1 match threshold + filter transparency
+
+- Profile + Run Pipeline: set / override minimum match % (default 60).
+- Location + include_remote gate filter eligibility; digests honor threshold.
+- Results/History show compact exclusion reasons from the filter stage.
+- Tests: `tests/test_threshold.py` (+ filter tests updated for `FilterResult`).
 
 ## [0.2.0] — Phase 0 guardrails
 

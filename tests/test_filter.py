@@ -33,14 +33,14 @@ def _job(title: str, desc: str = "", location: str = "Remote", skills=None) -> J
 def test_dedup_removes_identical_jobs():
     job = _job("AI Engineer", "python ml")
     profile = _mid_profile()
-    kept = JobFilterAgent().run([job, job], profile)
+    kept = JobFilterAgent().run([job, job], profile).jobs
     assert len(kept) == 1
 
 
 def test_relevance_drops_unrelated_roles():
     profile = _mid_profile()
     jobs = [_job("AI Engineer", "python required"), _job("Truck Driver", "cdl license")]
-    kept = JobFilterAgent().run(jobs, profile)
+    kept = JobFilterAgent().run(jobs, profile).jobs
     titles = [j.title for j in kept]
     assert "AI Engineer" in titles
     assert "Truck Driver" not in titles
@@ -49,14 +49,14 @@ def test_relevance_drops_unrelated_roles():
 def test_exclude_internships():
     profile = UserProfile(skills=["python"])
     jobs = [_job("Python Intern", "python internship"), _job("Python Engineer", "python")]
-    kept = JobFilterAgent().run(jobs, profile, exclude_internships=True)
+    kept = JobFilterAgent().run(jobs, profile, exclude_internships=True).jobs
     assert all("Intern" not in j.title for j in kept)
 
 
 def test_location_preference_allows_remote():
     profile = _mid_profile(preferred_location="Bangalore")
     jobs = [_job("Python Engineer", "python", location="Remote")]
-    kept = JobFilterAgent().run(jobs, profile)
+    kept = JobFilterAgent().run(jobs, profile).jobs
     assert len(kept) == 1
 
 
@@ -66,7 +66,7 @@ def test_location_fallback_to_resume_location():
         _job("Python Engineer", "python", location="Bangalore"),
         _job("Python Engineer", "python", location="Chennai"),
     ]
-    kept = JobFilterAgent().run(jobs, profile)
+    kept = JobFilterAgent().run(jobs, profile).jobs
     assert len(kept) == 1
     assert kept[0].location == "Bangalore"
 
@@ -77,7 +77,7 @@ def test_include_remote_false_drops_remote_jobs():
         _job("Remote Python Engineer", "python", location="Remote"),
         _job("Local Python Engineer", "python", location="Bangalore"),
     ]
-    kept = JobFilterAgent().run(jobs, profile)
+    kept = JobFilterAgent().run(jobs, profile).jobs
     assert len(kept) == 1
     assert kept[0].location == "Bangalore"
 
@@ -95,7 +95,7 @@ def test_fresher_profile_rejects_senior_jobs():
         _job("Senior Staff Engineer", "5+ years python required"),
         _job("Graduate ML Engineer", "python ml for new grads"),
     ]
-    kept = JobFilterAgent().run(jobs, profile, strict_experience=True)
+    kept = JobFilterAgent().run(jobs, profile, strict_experience=True).jobs
     titles = [j.title for j in kept]
     assert "Senior Staff Engineer" not in titles
     assert "Junior Developer" in titles
@@ -105,5 +105,5 @@ def test_fresher_profile_rejects_senior_jobs():
 def test_strict_experience_can_be_disabled():
     profile = UserProfile(experience_level="Fresher", skills=["python"])
     jobs = [_job("Senior Engineer", "python senior role")]
-    kept = JobFilterAgent().run(jobs, profile, strict_experience=False)
+    kept = JobFilterAgent().run(jobs, profile, strict_experience=False).jobs
     assert len(kept) == 1

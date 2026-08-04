@@ -36,6 +36,7 @@ from services.skills import (
     has_unrelated_enterprise_stack,
 )
 from services.vector_store import index_jobs, rank_by_similarity
+from services.threshold import effective_min_match_score, filter_match_results
 
 logger = get_logger(__name__)
 
@@ -96,6 +97,7 @@ class SemanticMatcherAgent:
         strict_experience: bool = True,
         allow_stretch: bool = False,
         flex_years: int | None = None,
+        min_match_score: int | None = None,
     ) -> list[MatchResult]:
         if not jobs:
             return []
@@ -192,7 +194,13 @@ class SemanticMatcherAgent:
             ),
             reverse=True,
         )
-        return results[:top_n]
+        threshold = effective_min_match_score(profile, min_match_score)
+        kept, dropped = filter_match_results(results, threshold)
+        if dropped:
+            logger.info(
+                f"Matcher: dropped {dropped} job(s) below min_match_score={threshold}"
+            )
+        return kept[:top_n]
 
     def _score_job(
         self,

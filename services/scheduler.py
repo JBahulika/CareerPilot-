@@ -15,6 +15,7 @@ from core.config import settings
 from core.logging import get_logger
 from database.repositories import create_run, get_latest_profile, get_matches_for_run
 from services.notifier import get_notifier
+from services.threshold import effective_min_match_score, filter_digest_matches
 
 logger = get_logger(__name__)
 
@@ -32,6 +33,7 @@ def _daily_job() -> None:
     logger.info(f"Daily scan starting pipeline run {run_id}")
 
     flex = profile.flex_years if profile.flex_years is not None else settings.experience_flex_years
+    threshold = effective_min_match_score(profile)
 
     run_pipeline(
         run_id,
@@ -44,9 +46,15 @@ def _daily_job() -> None:
         exclude_internships=profile.exclude_internships,
         include_remote=profile.include_remote,
         recent_days=settings.daily_recent_jobs_days,
+        min_match_score=threshold,
     )
 
     matches, _ = get_matches_for_run(run_id, offset=0, limit=settings.top_n_jobs)
+    matches, dropped = filter_digest_matches(matches, threshold)
+    if dropped:
+        logger.info(
+            f"Daily digest: skipped {dropped} match(es) below min_match_score={threshold}"
+        )
     sent = get_notifier().send_job_digest(profile, matches, run_id)
     logger.info(f"Daily scan run {run_id} complete; notified={sent}")
 
