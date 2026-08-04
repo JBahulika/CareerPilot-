@@ -6,10 +6,11 @@ from datetime import datetime
 from urllib.parse import quote_plus
 
 from agents.job_sources.common import (
+    annotate_and_filter_jobs,
     build_job,
-    prepare_scraped_jobs,
     search_location,
     search_terms,
+    sort_and_filter_recent,
 )
 from core.logging import get_logger
 from models.schemas import JobListing, UserProfile
@@ -59,8 +60,11 @@ def _playwright_fetch_cards(url: str, selectors: list[str], limit: int) -> list[
 
 
 def _finalize_scrape(jobs, profile, allow_stretch, flex_years, source_name) -> list[JobListing]:
-    jobs = prepare_scraped_jobs(jobs, profile)
-    logger.info(f"{source_name}: {len(jobs)} jobs after relevance + recency filter")
+    jobs = annotate_and_filter_jobs(
+        jobs, profile, allow_stretch=allow_stretch, flex_years=flex_years
+    )
+    jobs = sort_and_filter_recent(jobs)
+    logger.info(f"{source_name}: {len(jobs)} jobs after filters")
     return jobs
 
 
@@ -78,6 +82,9 @@ class WellfoundSource:
         now = datetime.utcnow()
         jobs = []
         for card in cards:
+            apply_url = card["apply_url"]
+            if apply_url.startswith("/"):
+                apply_url = f"https://wellfound.com{apply_url}"
             jobs.append(
                 build_job(
                     source=self.name,
@@ -85,8 +92,7 @@ class WellfoundSource:
                     title=card["title"],
                     description=card["description"],
                     location=card.get("location", ""),
-                    apply_url=card["apply_url"],
-                    apply_base="https://wellfound.com",
+                    apply_url=apply_url,
                     posted_at=now,
                 )
             )
@@ -114,8 +120,9 @@ class IndeedSource:
                 title=card["title"],
                 description=card["description"],
                 location=card.get("location", ""),
-                apply_url=card["apply_url"],
-                apply_base="https://www.indeed.com",
+                apply_url=f"https://www.indeed.com{card['apply_url']}"
+                if card["apply_url"].startswith("/")
+                else card["apply_url"],
             )
             for card in cards
         ]
@@ -146,8 +153,7 @@ class NaukriSource:
                 title=card["title"],
                 description=card["description"],
                 location=card.get("location") or (loc or "India"),
-                apply_url=card["apply_url"],
-                apply_base="https://www.naukri.com",
+                apply_url=card["apply_url"] if card["apply_url"].startswith("http") else f"https://www.naukri.com{card['apply_url']}",
             )
             for card in cards
         ]
@@ -175,8 +181,7 @@ class LinkedInSource:
                 title=card["title"],
                 description=card["description"],
                 location=card.get("location", ""),
-                apply_url=card["apply_url"],
-                apply_base="https://www.linkedin.com",
+                apply_url=card["apply_url"] if card["apply_url"].startswith("http") else "",
             )
             for card in cards
         ]
@@ -204,8 +209,7 @@ class GlassdoorSource:
                 title=card["title"],
                 description=card["description"],
                 location=card.get("location", ""),
-                apply_url=card["apply_url"],
-                apply_base="https://www.glassdoor.com",
+                apply_url=card["apply_url"] if card["apply_url"].startswith("http") else "",
             )
             for card in cards
         ]

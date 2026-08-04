@@ -53,6 +53,7 @@ class MatchRow(SQLModel, table=True):
     matched_skills_json: list = Field(default_factory=list, sa_column=Column(SA_JSON))
     missing_skills_json: list = Field(default_factory=list, sa_column=Column(SA_JSON))
     reasons_json: list = Field(default_factory=list, sa_column=Column(SA_JSON))
+    scores_json: dict = Field(default_factory=dict, sa_column=Column(SA_JSON))
     recommendation: str = ""
     generated_pdf_path: str = ""
     created_at: datetime = Field(default_factory=datetime.utcnow)

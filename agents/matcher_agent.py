@@ -1,9 +1,10 @@
 """Semantic Matching Agent (FR-4).
 
-Combines embedding similarity (ChromaDB) with LLM reasoning to produce an
-explainable match score, matched/missing skills, and a recommendation. The
-final score blends embedding, deterministic skill overlap, and LLM signals.
-Jobs outside the candidate's experience band are excluded when strict mode is on.
+Pipeline for max accuracy:
+  1. Seniority pre-filter (hard gate)
+  2. Bi-encoder retrieval + optional BM25 hybrid (recall)
+  3. Cross-encoder rerank (precision)
+  4. LLM scoring on top candidates only (explanations + tie-break)
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from agents.base import call_ollama_json
+from core.config import settings
 from core.logging import get_logger
 from models.schemas import (
     JobListing,
@@ -19,6 +21,8 @@ from models.schemas import (
     UserProfile,
 )
 from prompts.templates import MATCHER_SYSTEM
+from services.embeddings import normalize_rerank_scores, rerank_pairs
+from services.hybrid_search import hybrid_similarity
 from services.seniority import (
     candidate_tier_label,
     compatibility_detail,
@@ -30,21 +34,16 @@ from services.skills import (
     deterministic_skill_overlap,
     filter_matched_skills,
     has_unrelated_enterprise_stack,
-    is_relevant_job_posting,
 )
 from services.vector_store import index_jobs, rank_by_similarity
 
 logger = get_logger(__name__)
 
-_EMBED_WEIGHT = 0.45
-_SKILL_WEIGHT = 0.25
-_LLM_WEIGHT = 0.30
 _RECENCY_BONUS_HOURS = 48
 _RECENCY_BONUS_MAX = 5
 
 
 def _recency_bonus(job: JobListing) -> int:
-    """Small score boost for jobs posted within the last 48 hours."""
     posted = job.posted_at or job.scraped_at
     if posted is None:
         return 0
@@ -52,6 +51,39 @@ def _recency_bonus(job: JobListing) -> int:
     if age <= timedelta(hours=_RECENCY_BONUS_HOURS):
         return _RECENCY_BONUS_MAX
     return 0
+
+
+def _combine_score(
+    *,
+    embed_score: float,
+    skill_score: float,
+    rerank_score: float,
+    llm_score: float,
+    used_llm: bool,
+) -> int:
+    if used_llm:
+        w_embed = settings.score_weight_embed
+        w_skill = settings.score_weight_skill
+        w_rerank = settings.score_weight_rerank
+        w_llm = settings.score_weight_llm
+    else:
+        total = (
+            settings.score_weight_embed
+            + settings.score_weight_skill
+            + settings.score_weight_rerank
+        )
+        w_embed = settings.score_weight_embed / total
+        w_skill = settings.score_weight_skill / total
+        w_rerank = settings.score_weight_rerank / total
+        w_llm = 0.0
+
+    combined = (
+        w_embed * embed_score
+        + w_skill * skill_score
+        + w_rerank * rerank_score
+        + w_llm * llm_score
+    )
+    return max(0, min(100, round(combined)))
 
 
 class SemanticMatcherAgent:
@@ -69,178 +101,176 @@ class SemanticMatcherAgent:
             return []
 
         candidate_tier = infer_candidate_tier(profile)
-
-        relevant = [
-            job
-            for job in jobs
-            if is_relevant_job_posting(job, profile)
-            and not has_unrelated_enterprise_stack(job, profile)
-        ]
-
-        # Progressive relaxation: never leave the user with an empty page.
-        # 1) strict (relevance + experience band) -> 2) relevance only ->
-        # 3) any scraped job. Relaxed pools are ranked and clearly labelled.
-        relaxed = False
-        pool = relevant
+        eligible = jobs
         if strict_experience:
-            strict_pool = [
+            eligible = [
                 job
-                for job in relevant
+                for job in jobs
                 if is_job_compatible_with_profile(
                     job,
                     profile,
                     allow_stretch=allow_stretch,
                     flex_years=flex_years,
                 )
+                and not has_unrelated_enterprise_stack(job, profile)
             ]
-            if strict_pool:
-                pool = strict_pool
-            elif relevant:
-                pool = relevant
-                relaxed = True
-                logger.info(
-                    "Matcher: no jobs inside experience band — relaxing seniority "
-                    "to surface the closest roles"
-                )
-
-        if not pool:
-            pool = jobs
-            relaxed = True
             logger.info(
-                "Matcher: no domain-relevant jobs — falling back to all scraped jobs"
+                f"Matcher: {len(jobs)} -> {len(eligible)} jobs after seniority pre-filter"
             )
 
-        logger.info(
-            f"Matcher: {len(jobs)} -> {len(pool)} candidate jobs (relaxed={relaxed})"
-        )
+        if not eligible:
+            return []
 
-        index_jobs(pool)
-        similarity = rank_by_similarity(
-            profile.summary_text(), [j.content_hash for j in pool]
+        index_jobs(eligible)
+        query_text = profile.embedding_query_text()
+        vector_scores = rank_by_similarity(
+            query_text, [j.content_hash for j in eligible]
         )
+        recall_scores = hybrid_similarity(query_text, eligible, vector_scores)
 
-        ranked = sorted(
-            pool,
+        ranked_recall = sorted(
+            eligible,
             key=lambda j: (
-                similarity.get(j.content_hash, 0.0),
-                j.relevance_score,
-                (j.posted_at or j.scraped_at or datetime.min),
+                recall_scores.get(j.content_hash, 0.0),
+                j.posted_at or j.scraped_at or datetime.min,
             ),
             reverse=True,
         )
-        shortlist = ranked[: max(top_n * 2, top_n)]
+        recall_pool = ranked_recall[: settings.matcher_recall_top_n]
+        rerank_pool = recall_pool[: settings.matcher_rerank_top_n]
+
+        rerank_raw = rerank_pairs(
+            profile.embedding_query_text(),
+            [j.embedding_passage_text() for j in rerank_pool],
+        )
+        rerank_norm = normalize_rerank_scores(rerank_raw)
+        rerank_map = {
+            job.content_hash: rerank_norm[i] * 100
+            for i, job in enumerate(rerank_pool)
+        }
+
+        reranked = sorted(
+            rerank_pool,
+            key=lambda j: (
+                rerank_map.get(j.content_hash, 0.0),
+                recall_scores.get(j.content_hash, 0.0),
+            ),
+            reverse=True,
+        )
+        llm_hashes = {
+            j.content_hash
+            for j in reranked[: settings.matcher_llm_top_n]
+        }
 
         results: list[MatchResult] = []
-        for job in shortlist:
-            embed_score = similarity.get(job.content_hash, 0.0) * 100
-            skill_score = deterministic_skill_overlap(profile, job)
+        score_pool = reranked[: max(top_n * 2, top_n)]
+
+        for job in score_pool:
+            embed_score = recall_scores.get(job.content_hash, 0.0) * 100
+            skill_score = float(deterministic_skill_overlap(profile, job))
+            rerank_score = rerank_map.get(job.content_hash, embed_score)
+            used_llm = job.content_hash in llm_hashes
             match = self._score_job(
                 profile,
                 job,
-                embed_score,
-                skill_score,
+                embed_score=embed_score,
+                skill_score=skill_score,
+                rerank_score=rerank_score,
                 candidate_tier=candidate_tier,
                 allow_stretch=allow_stretch,
                 flex_years=flex_years,
-                relaxed=relaxed,
+                use_llm=used_llm,
             )
+            if strict_experience and match.recommendation == Recommendation.SKIP:
+                continue
             results.append(match)
 
-        def _rank_key(m: MatchResult):
-            return (m.match_score, m.job.posted_at or m.job.scraped_at or datetime.min)
-
-        quality = [
-            m
-            for m in results
-            if m.recommendation != Recommendation.SKIP and m.match_score >= 35
-        ]
-        if quality:
-            quality.sort(key=_rank_key, reverse=True)
-            return quality[:top_n]
-
-        # Best-effort: surface the closest jobs rather than returning nothing.
-        results.sort(key=_rank_key, reverse=True)
+        results.sort(
+            key=lambda m: (
+                m.match_score,
+                m.job.posted_at or m.job.scraped_at or datetime.min,
+            ),
+            reverse=True,
+        )
         return results[:top_n]
 
     def _score_job(
         self,
         profile: UserProfile,
         job: JobListing,
+        *,
         embed_score: float,
         skill_score: float,
-        *,
+        rerank_score: float,
         candidate_tier: int,
         allow_stretch: bool = False,
         flex_years: int | None = None,
-        relaxed: bool = False,
+        use_llm: bool = True,
     ) -> MatchResult:
         detail = compatibility_detail(
             job, profile, allow_stretch=allow_stretch, flex_years=flex_years
         )
         level_ok = detail["compatible"]
+        llm_score = rerank_score
+        matched: list[str] = []
+        missing: list[str] = []
+        reasons: list[str] = []
+        recommendation = Recommendation.CONSIDER
 
-        try:
-            data = call_ollama_json(MATCHER_SYSTEM, self._user_prompt(profile, job))
-            llm_score = float(data.get("match_score", 0))
-            matched = filter_matched_skills(
-                profile, data.get("matched_skills", []) or []
-            )
-            missing = data.get("missing_skills", []) or []
-            reasons = data.get("reasons", []) or []
-            recommendation = self._to_recommendation(data.get("recommendation", ""))
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(f"LLM match failed for '{job.title}': {exc}")
-            llm_score = max(embed_score, skill_score)
-            matched, missing, reasons = [], [], ["Scored on skill similarity only."]
-            recommendation = Recommendation.CONSIDER
+        if use_llm:
+            try:
+                data = call_ollama_json(MATCHER_SYSTEM, self._user_prompt(profile, job))
+                llm_score = float(data.get("match_score", rerank_score))
+                matched = filter_matched_skills(
+                    profile, data.get("matched_skills", []) or []
+                )
+                missing = data.get("missing_skills", []) or []
+                reasons = data.get("reasons", []) or []
+                recommendation = self._to_recommendation(data.get("recommendation", ""))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"LLM match failed for '{job.title}': {exc}")
+                llm_score = rerank_score
+                reasons = ["Scored with reranker and skill overlap (LLM unavailable)."]
+        else:
+            reasons = ["Ranked by cross-encoder reranker and skill overlap."]
 
-        combined = round(
-            _EMBED_WEIGHT * embed_score
-            + _SKILL_WEIGHT * skill_score
-            + _LLM_WEIGHT * llm_score
+        combined = _combine_score(
+            embed_score=embed_score,
+            skill_score=skill_score,
+            rerank_score=rerank_score,
+            llm_score=llm_score,
+            used_llm=use_llm,
         )
         combined += _recency_bonus(job)
         combined = max(0, min(100, combined))
 
         if skill_score < 15 and not matched:
-            if relaxed:
-                combined = max(0, combined - 15)
-                reasons = list(reasons) + [
-                    "Limited skill overlap — shown because no closer roles were found."
-                ]
-            else:
-                combined = min(combined, 35)
-                recommendation = Recommendation.SKIP
-                reasons = list(reasons) + [
-                    "Low skill overlap with your profile — role may be unrelated."
-                ]
+            combined = min(combined, 35)
+            recommendation = Recommendation.SKIP
+            reasons = list(reasons) + [
+                "Low skill overlap with your profile — role may be unrelated."
+            ]
 
         if not level_ok:
-            mismatch_reason = (
-                f"Experience mismatch: you are {detail['candidate_label']} "
-                f"(target {detail['target_years']} yrs) but this job is "
-                f"{detail['job_label']} "
-                f"({detail['job_required_years']}+ yrs required)."
-            )
-            if relaxed:
-                # Keep the job visible as a stretch/reach rather than hiding it.
-                combined = max(0, combined - 20)
-                reasons = list(reasons) + [
-                    "Stretch role (asks for more experience than your target): "
-                    + mismatch_reason
-                ]
-            else:
-                combined = min(combined, 20)
-                recommendation = Recommendation.SKIP
-                reasons = list(reasons) + [mismatch_reason]
-
-        # In relaxed mode we never hard-skip: these are the closest available jobs.
-        if relaxed and recommendation == Recommendation.SKIP:
-            recommendation = Recommendation.CONSIDER
+            combined = min(combined, 20)
+            recommendation = Recommendation.SKIP
+            reasons = list(reasons) + [
+                (
+                    f"Experience mismatch: you are {detail['candidate_label']} "
+                    f"(target {detail['target_years']} yrs) but this job is "
+                    f"{detail['job_label']} "
+                    f"({detail['job_required_years']}+ yrs required)."
+                )
+            ]
 
         return MatchResult(
             job=job,
             match_score=combined,
+            embed_score=round(embed_score, 1),
+            skill_score=round(skill_score, 1),
+            rerank_score=round(rerank_score, 1),
+            llm_score=round(llm_score, 1),
+            seniority_compatible=level_ok,
             matched_skills=matched,
             missing_skills=missing,
             reasons=reasons,

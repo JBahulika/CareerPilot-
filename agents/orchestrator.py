@@ -28,7 +28,7 @@ from database.repositories import (
     update_run,
     upsert_jobs,
 )
-from models.schemas import JobListing, MatchResult, Recommendation, RunStatus, UserProfile
+from models.schemas import JobListing, MatchResult, RunStatus, UserProfile
 
 logger = get_logger(__name__)
 
@@ -115,13 +115,10 @@ def _filter_node(state: PipelineState) -> PipelineState:
 def _match_node(state: PipelineState) -> PipelineState:
     update_run(state["run_id"], current_step="match")
     profile = _resolve_profile(state)
-    # If strict filtering removed everything, let the matcher relax over the raw
-    # scraped jobs so the user still sees the closest roles instead of nothing.
-    jobs_for_match = state.get("filtered_jobs") or state.get("jobs", [])
     try:
         matches = _matcher.run(
             profile,
-            jobs_for_match,
+            state.get("filtered_jobs", []),
             top_n=state.get("top_n", settings.top_n_jobs),
             strict_experience=state.get("strict_experience", True),
             allow_stretch=state.get("allow_stretch", False),
@@ -138,27 +135,20 @@ def _tailor_node(state: PipelineState) -> PipelineState:
     update_run(state["run_id"], current_step="tailor")
     profile = state["profile"]
     matches = state.get("matches", [])
-    to_tailor = [m for m in matches if m.recommendation != Recommendation.SKIP]
-    total = len(to_tailor)
     pdfs: list[str] = []
     errors = list(state.get("errors", []))
 
-    for idx, match in enumerate(to_tailor, start=1):
-        update_run(
-            state["run_id"],
-            current_step=f"tailor ({idx}/{total})" if total else "tailor",
-        )
+    for match in matches:
         try:
             tailored = _tailor.run(profile, match.job)
             pdf_path = _pdf.run(tailored, match.job)
             match.generated_pdf_path = pdf_path
             pdfs.append(pdf_path)
-            update_run(state["run_id"], pdfs_generated=len(pdfs))
         except Exception as exc:  # noqa: BLE001
             logger.error(f"Tailoring failed for '{match.job.title}': {exc}")
             errors.append(f"tailor[{match.job.title}]: {exc}")
 
-    update_run(state["run_id"], pdfs_generated=len(pdfs), current_step="tailor")
+    update_run(state["run_id"], pdfs_generated=len(pdfs))
     return {"generated_pdfs": pdfs, "matches": matches, "errors": errors}
 
 
@@ -171,17 +161,8 @@ def _persist_node(state: PipelineState) -> PipelineState:
     }
     save_matches(state["run_id"], matches, job_ids)
 
-    errors = list(state.get("errors", []))
-    if not matches:
-        errors.append(
-            "No strong matches found. Scraped jobs did not fit your profile "
-            "(experience level, AIML role, or location). Try: increase scrape limit, "
-            "use remotive or naukri source, enable stretch roles, or widen recency days."
-        )
-
-    status = RunStatus.COMPLETED.value
-    if not state.get("jobs") and not matches:
-        status = RunStatus.FAILED.value
+    errors = state.get("errors", [])
+    status = RunStatus.COMPLETED.value if matches else RunStatus.FAILED.value
     finish_run(state["run_id"], status=status, errors=errors)
     return {"current_step": "complete"}
 
