@@ -1,6 +1,6 @@
 # CareerPilot AI
 
-**Version [`0.2.3`](VERSION)** · [Changelog](CHANGELOG.md) · [Upgrade notes](docs/UPGRADE_NOTES.md) · [Legal stance](docs/LEGAL.md)
+**Version [`0.2.4`](VERSION)** · [Changelog](CHANGELOG.md) · [Upgrade notes](docs/UPGRADE_NOTES.md) · [Legal stance](docs/LEGAL.md)
 
 An autonomous, **local-first** AI assistant that discovers relevant jobs, scores
 them against your resume, and generates ATS-friendly tailored resumes — all on
@@ -120,7 +120,7 @@ All settings live in `.env` (see [`.env.example`](.env.example)):
 
 ### Job sources
 
-CareerPilot prefers public API/RSS sources. Captcha-prone scrapes are off by default:
+CareerPilot prefers public API/RSS sources. LinkedIn/Indeed are default-on best-effort scrapes (abort on captcha; never solve). Glassdoor stays off by default:
 
 | Site | Method | Region | Safety | Default |
 |------|--------|--------|--------|---------|
@@ -134,8 +134,8 @@ CareerPilot prefers public API/RSS sources. Captcha-prone scrapes are off by def
 | Working Nomads | API | Global | api | on |
 | Wellfound (AngelList) | Scrape | Global | scrape_risky | off |
 | Naukri | Scrape | India | scrape_risky | off |
-| Indeed | Scrape | Global | disabled_captcha | off |
-| LinkedIn | Scrape | Global | disabled_captcha | off |
+| Indeed | Scrape | Global | disabled_captcha | on |
+| LinkedIn | Scrape | Global | disabled_captcha | on |
 | Glassdoor | Scrape | Global | disabled_captcha | off |
 
 Set `JOB_SOURCE=all` to query every source in one run, or pick a single id (e.g. `remotive`, `naukri`). Scraped sites may return fewer results when a board blocks automation. Challenge/captcha pages are **aborted** (`captcha_blocked`) — CareerPilot never solves captchas. Check **Setup → Job source health** or `GET /jobs/sources/health`.

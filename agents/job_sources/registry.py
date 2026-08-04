@@ -10,7 +10,7 @@ from models.schemas import JobListing, UserProfile
 #   api              — public JSON/API (preferred)
 #   scrape_safe      — HTML scrape, usually works without login walls
 #   scrape_risky     — often flaky / soft-gated
-#   disabled_captcha — frequent captcha/login challenges; off by default
+#   disabled_captcha — frequent captcha/login challenges (may still be default-on best-effort)
 POPULAR_JOB_SITES: list[dict[str, object]] = [
     {
         "id": "remotive",
@@ -107,18 +107,18 @@ POPULAR_JOB_SITES: list[dict[str, object]] = [
         "name": "Indeed",
         "method": "scrape",
         "safety": "disabled_captcha",
-        "enabled_by_default": False,
+        "enabled_by_default": True,
         "region": "global",
-        "notes": "Frequent captcha/challenge pages — off by default",
+        "notes": "Best-effort Playwright; abort on captcha_blocked; may fail without login",
     },
     {
         "id": "linkedin",
         "name": "LinkedIn",
         "method": "scrape",
         "safety": "disabled_captcha",
-        "enabled_by_default": False,
+        "enabled_by_default": True,
         "region": "global",
-        "notes": "Login/captcha walls — off by default; never bypass",
+        "notes": "Best-effort Playwright; abort on captcha_blocked; may fail without login; never bypass",
     },
     {
         "id": "glassdoor",

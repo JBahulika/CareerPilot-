@@ -24,6 +24,19 @@ Do not ship feature work without a changelog line.
 - Phase 4+: WhatsApp/email digests, proxies, optional cookies, dedupe,
   skills-gap / cover-letter — see `docs/UPGRADE_NOTES.md`.
 
+## [0.2.4] — 2026-08-05
+
+### Changed
+
+- **LinkedIn** and **Indeed** are default-on again (best-effort Playwright scrape).
+- Safety remains `disabled_captcha`: Phase 2 still aborts on challenge pages
+  (`captcha_blocked`) — captchas are never solved.
+- Glassdoor stays off by default.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
 ## [0.2.3] — 2026-08-05
 
 ### Added

@@ -50,11 +50,12 @@ Workflow:
 - [`phase-1-match-threshold`](https://github.com/JBahulika/CareerPilot-/tree/phase-1-match-threshold)
 - [`phase-2-safe-scrape-client`](https://github.com/JBahulika/CareerPilot-/tree/phase-2-safe-scrape-client)
 - [`phase-3-safe-sources`](https://github.com/JBahulika/CareerPilot-/tree/phase-3-safe-sources)
+- [`phase-3b-enable-linkedin-indeed`](https://github.com/JBahulika/CareerPilot-/tree/phase-3b-enable-linkedin-indeed)
 - [`main`](https://github.com/JBahulika/CareerPilot-/tree/main) (latest merged work)
 
 ## Models pin (update when defaults change)
 
-| Component | Current default (0.2.3) |
+| Component | Current default (0.2.4) |
 |-----------|-------------------------|
 | Ollama LLM | `qwen2.5:7b` |
 | Embeddings | `BAAI/bge-base-en-v1.5` |
@@ -62,6 +63,12 @@ Workflow:
 | Min match score | `60` (user-settable) |
 
 Source of truth for runtime knobs: `core/config.py` (mirrored in `.env.example`).
+
+## [0.2.4] — Enable LinkedIn + Indeed by default
+
+- LinkedIn / Indeed: `enabled_by_default=True`, still `disabled_captcha` + captcha abort.
+- Glassdoor remains off by default.
+- Dependencies: no `requirements.txt` changes.
 
 ## [0.2.3] — Phase 3 safe sources + allowlist
 
