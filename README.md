@@ -12,11 +12,22 @@ locally.
 
 ## Changelog rule
 
-Every phase PR and merged upgrade **must** append an entry to
-[`CHANGELOG.md`](CHANGELOG.md) and a short bullet in
-[`docs/UPGRADE_NOTES.md`](docs/UPGRADE_NOTES.md). Do not merge feature work
-without those updates. Bump [`VERSION`](VERSION) (and the FastAPI `version` in
-`main.py`) when cutting a release.
+Every phase ships on a **dedicated GitHub branch** (e.g. `phase-2-…`), then
+merges to `main`. **Keep prior phase branches** on GitHub as backups — do not
+delete them after merge.
+
+Each phase **must** update:
+
+| Artifact | What to update |
+|----------|----------------|
+| [`CHANGELOG.md`](CHANGELOG.md) | Version section + bullets |
+| [`docs/UPGRADE_NOTES.md`](docs/UPGRADE_NOTES.md) | Human summary + checklist |
+| [`VERSION`](VERSION) + `main.py` | Semver bump when cutting the phase release |
+| [`README.md`](README.md) | Version line, settings, UX, stack/models |
+| [`requirements.txt`](requirements.txt) | New/changed deps — or note “no dependency changes” in CHANGELOG |
+| [`.env.example`](.env.example) | New env knobs |
+
+See the full shipping checklist in [`docs/UPGRADE_NOTES.md`](docs/UPGRADE_NOTES.md).
 
 ## Pipeline
 
