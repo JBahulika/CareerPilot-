@@ -24,20 +24,14 @@ def _recent_iso() -> str:
     return (datetime.utcnow() - timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def test_glassdoor_still_off_by_default():
+def test_scrape_boards_on_by_default():
     by_id = {s["id"]: s for s in POPULAR_JOB_SITES}
-    assert by_id["glassdoor"]["safety"] == "disabled_captcha"
-    assert by_id["glassdoor"]["enabled_by_default"] is False
-
-
-def test_linkedin_indeed_on_by_default_but_captcha_tagged():
-    by_id = {s["id"]: s for s in POPULAR_JOB_SITES}
-    for sid in ("indeed", "linkedin"):
-        assert by_id[sid]["safety"] == "disabled_captcha"
+    for sid in ("indeed", "linkedin", "glassdoor", "wellfound", "naukri"):
         assert by_id[sid]["enabled_by_default"] is True
+        assert by_id[sid]["method"] == "scrape"
 
 
-def test_default_enabled_include_api_and_linkedin_indeed():
+def test_default_enabled_include_api_and_scrape_boards():
     enabled = set(default_enabled_source_ids())
     assert "remotive" in enabled
     assert "themuse" in enabled
@@ -45,7 +39,9 @@ def test_default_enabled_include_api_and_linkedin_indeed():
     assert "workingnomads" in enabled
     assert "linkedin" in enabled
     assert "indeed" in enabled
-    assert "glassdoor" not in enabled
+    assert "glassdoor" in enabled
+    assert "naukri" in enabled
+    assert "wellfound" in enabled
 
 
 def test_resolve_allowlist_uses_profile_override():
@@ -71,6 +67,44 @@ def test_aggregate_respects_allowlist(monkeypatch):
     assert "remotive" in calls
     assert "themuse" in calls
     assert "linkedin" not in calls
+    by_id = {r["id"]: r for r in agg.last_fetch_report}
+    assert by_id["linkedin"]["status"] == "skipped"
+    assert by_id["remotive"]["status"] == "empty"
+
+
+def test_aggregate_report_records_errors():
+    class _Ok:
+        name = "remotive"
+
+        def fetch(self, profile, limit, *, allow_stretch=False, flex_years=None):
+            from agents.job_sources.common import build_job
+            from datetime import datetime
+
+            return [
+                build_job(
+                    source="remotive",
+                    company="Acme",
+                    title="Python Engineer",
+                    description="Python remote",
+                    posted_at=datetime.utcnow(),
+                )
+            ]
+
+    class _Boom:
+        name = "linkedin"
+
+        def fetch(self, profile, limit, *, allow_stretch=False, flex_years=None):
+            raise RuntimeError("connection refused")
+
+    agg = AggregateSource([_Ok(), _Boom()])
+    profile = UserProfile(enabled_sources=["remotive", "linkedin"])
+    jobs = agg.fetch(profile, limit=20)
+    assert len(jobs) == 1
+    by_id = {r["id"]: r for r in agg.last_fetch_report}
+    assert by_id["remotive"]["status"] == "ok"
+    assert by_id["remotive"]["returned"] == 1
+    assert by_id["linkedin"]["status"] == "error"
+    assert "refused" in by_id["linkedin"]["detail"]
 
 
 def test_parse_rss_items():

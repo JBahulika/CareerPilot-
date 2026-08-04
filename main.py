@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="CareerPilot AI",
     description="Autonomous AI job discovery and resume tailoring assistant.",
-    version="0.2.4",
+    version="0.2.11",
     lifespan=lifespan,
 )
 
