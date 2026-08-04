@@ -28,3 +28,5 @@ chroma/
 .DS_Store
 .idea/
 .vscode/
+
+cenv/

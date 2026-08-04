@@ -9,12 +9,11 @@ from models.schemas import JobListing, UserProfile
 
 def _mid_profile(**kwargs) -> UserProfile:
     base = dict(
-        skills=["python", "backend"],
+        skills=["python"],
         experience_level="3-5 years",
         target_years_min=3,
         target_years_max=5,
-        preferred_roles=["Software Engineer"],
-        preferred_fields=["software"],
+        preferred_roles=["AI Engineer"],
     )
     base.update(kwargs)
     return UserProfile(**base)
@@ -39,15 +38,8 @@ def test_dedup_removes_identical_jobs():
 
 
 def test_relevance_drops_unrelated_roles():
-    profile = _mid_profile(
-        preferred_roles=["AI Engineer"],
-        skills=["python", "machine learning"],
-        preferred_fields=["aiml"],
-    )
-    jobs = [
-        _job("AI Engineer", "python ai machine learning required"),
-        _job("Truck Driver", "cdl license"),
-    ]
+    profile = _mid_profile()
+    jobs = [_job("AI Engineer", "python required"), _job("Truck Driver", "cdl license")]
     kept = JobFilterAgent().run(jobs, profile)
     titles = [j.title for j in kept]
     assert "AI Engineer" in titles
@@ -97,17 +89,16 @@ def test_fresher_profile_rejects_senior_jobs():
         target_years_max=1,
         skills=["python", "machine learning"],
         preferred_roles=["AI Engineer", "Machine Learning Engineer"],
-        preferred_fields=["aiml"],
     )
     jobs = [
-        _job("Junior ML Engineer", "python ml ai entry level"),
+        _job("Junior Developer", "python ml entry level"),
         _job("Senior Staff Engineer", "5+ years python required"),
-        _job("Graduate ML Engineer", "python ml machine learning for new grads"),
+        _job("Graduate ML Engineer", "python ml for new grads"),
     ]
     kept = JobFilterAgent().run(jobs, profile, strict_experience=True)
     titles = [j.title for j in kept]
     assert "Senior Staff Engineer" not in titles
-    assert "Junior ML Engineer" in titles
+    assert "Junior Developer" in titles
     assert "Graduate ML Engineer" in titles
 
 

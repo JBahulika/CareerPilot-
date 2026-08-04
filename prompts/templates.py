@@ -14,25 +14,42 @@ this schema:
   "email": string,
   "phone": string,
   "location": string,
+  "linkedin_url": string,
+  "github_url": string,
+  "portfolio_url": string,
+  "summary": string,             // professional summary if present
   "experience_level": string,    // e.g. "Fresher", "1-3 years", "5+ years"
-  "skills": [string],
+  "skills": [string],            // all skills (legacy flat list)
+  "technical_skills": [string],
+  "soft_skills": [string],
+  "domains": [string],           // e.g. "fintech", "healthcare", "e-commerce"
   "education": [{"degree": string, "institution": string, "year": string}],
-  "projects": [{"name": string, "description": string, "tech_stack": [string]}],
-  "experience": [{"title": string, "company": string, "duration": string, "description": string}],
+  "projects": [{"name": string, "description": string, "tech_stack": [string], "url": string, "role": string}],
+  "experience": [{
+    "title": string,
+    "company": string,
+    "duration": string,
+    "description": string,
+    "start_date": string,        // YYYY-MM when known
+    "end_date": string,          // YYYY-MM or empty if current
+    "is_current": boolean,
+    "bullets": [string],
+    "technologies": [string]
+  }],
   "certifications": [string],
   "preferred_roles": [string],   // infer 2-4 target roles from the resume
-  "preferred_fields": [string], // infer 1-3 job field ids from: aiml, data_science, backend, frontend, fullstack, devops, mobile, cloud, qa, software
   "preferred_location": string
 }
 
 Rules:
 - Extract only what is present. Do not invent facts.
-- If a field is missing, use an empty string or empty list.
+- If a field is missing, use an empty string, false, or empty list.
+- Put programming languages, frameworks, and tools in technical_skills.
 - Classify experience_level as exactly one of: "Fresher", "0-1 years", "1-3 years", "3-5 years", "5+ years".
 - If the resume lists no full-time work experience, experience_level must be "Fresher" or "0-1 years".
 - Count internships and academic projects toward skills, not toward years of professional experience.
+- Parse start_date/end_date as YYYY-MM when dates are explicit.
 - Infer preferred_roles from the candidate's skills and experience.
-- Infer preferred_fields using only these ids: aiml, data_science, backend, frontend, fullstack, devops, mobile, cloud, qa, software.
 - Return JSON only, no commentary."""
 
 

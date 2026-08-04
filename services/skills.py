@@ -32,88 +32,39 @@ _SKILL_ALIASES: dict[str, list[str]] = {
     "dsa": ["data structures", "algorithms"],
     "llm": ["large language model", "large language models"],
     "rag": ["retrieval augmented", "retrieval-augmented"],
+    "js": ["javascript"],
+    "ts": ["typescript"],
+    "py": ["python"],
+    "k8s": ["kubernetes"],
+    "kube": ["kubernetes"],
+    "postgres": ["postgresql"],
+    "mongo": ["mongodb"],
+    "tf": ["tensorflow"],
+    "pt": ["pytorch"],
+    "react.js": ["react"],
+    "reactjs": ["react"],
+    "node.js": ["nodejs", "node"],
+    "next.js": ["nextjs"],
+    "vue.js": ["vue"],
+    "langchain": ["lang graph", "langgraph"],
+    "fastapi": ["fast api"],
+    "scikit-learn": ["sklearn"],
+}
+
+# Related skills — a hit on the job side counts if the profile has any related term.
+_SKILL_RELATED: dict[str, list[str]] = {
+    "react": ["javascript", "typescript", "frontend", "next.js", "nextjs"],
+    "pytorch": ["python", "deep learning", "machine learning", "ml"],
+    "tensorflow": ["python", "deep learning", "machine learning", "ml"],
+    "langchain": ["python", "llm", "rag", "langgraph"],
+    "fastapi": ["python", "rest", "api", "backend"],
+    "django": ["python", "backend", "web"],
+    "kubernetes": ["docker", "devops", "cloud"],
+    "aws": ["cloud", "devops", "ec2", "s3"],
+    "sql": ["postgresql", "mysql", "database"],
 }
 
 _WORD_RE = re.compile(r"[a-z0-9+#.]+", re.IGNORECASE)
-
-# Titles that are almost never AIML/software roles for our users.
-_EXCLUDED_TITLE_PATTERNS = [
-    r"\bproposal\s+manager\b",
-    r"\brisk\s+manager\b",
-    r"\baccount\s+manager\b",
-    r"\bsales\s+(?:manager|rep|executive)\b",
-    r"\bmarketing\s+(?:manager|lead|director|operations)\b",
-    r"\blifecycle\s+operations\b",
-    r"\bcustomer\s+(?:support|success)\b",
-    r"\brecruiter\b",
-    r"\bhr\s+(?:manager|generalist)\b",
-    r"\baccountant\b",
-    r"\blawyer\b",
-    r"\btruck\s+driver\b",
-    r"\bnurse\b",
-    r"\bcontent\s+writer\b",
-    r"\bprogram\s+manager\b(?!.*\b(?:engineer|technical|ml|ai)\b)",
-]
-
-_TECH_TITLE_WORDS = frozenset(
-    {
-        "engineer",
-        "developer",
-        "scientist",
-        "analyst",
-        "architect",
-        "programmer",
-        "intern",
-        "graduate",
-        "researcher",
-    }
-)
-
-_AIML_STRONG_TERMS = frozenset(
-    {
-        "ai",
-        "ml",
-        "aiml",
-        "machine learning",
-        "deep learning",
-        "artificial intelligence",
-        "nlp",
-        "llm",
-        "rag",
-        "pytorch",
-        "tensorflow",
-        "langchain",
-        "langgraph",
-        "computer vision",
-        "data scientist",
-        "ml engineer",
-        "ai engineer",
-    }
-)
-
-_AIML_DOMAIN_TERMS = frozenset(
-    {
-        "ai",
-        "ml",
-        "machine",
-        "learning",
-        "deep",
-        "nlp",
-        "llm",
-        "rag",
-        "pytorch",
-        "tensorflow",
-        "computer",
-        "vision",
-        "scientist",
-        "artificial",
-        "aiml",
-        "langchain",
-        "langgraph",
-    }
-)
-
-_SHORT_SKILL_TERMS = frozenset({"ai", "ml", "cv", "nlp", "llm", "rag", "dsa"})
 
 
 def _tokens(text: str) -> set[str]:
@@ -129,13 +80,31 @@ def _expand_skill(skill: str) -> set[str]:
         for alias in _SKILL_ALIASES.get(token, []):
             out.add(alias.lower())
             out.update(_tokens(alias))
+        for related in _SKILL_RELATED.get(token, []):
+            out.add(related.lower())
+            out.update(_tokens(related))
     return out
+
+
+def normalize_skill(skill: str) -> str:
+    """Return a canonical lowercase form for display/comparison."""
+    key = skill.strip().lower()
+    for canonical, aliases in _SKILL_ALIASES.items():
+        if key == canonical or key in aliases:
+            return canonical
+    return key
 
 
 def profile_skill_terms(profile: UserProfile) -> set[str]:
     terms: set[str] = set()
-    for skill in profile.skills:
+    for skill in profile.all_skills():
         terms.update(_expand_skill(skill))
+    for exp in profile.experience:
+        for tech in exp.technologies:
+            terms.update(_expand_skill(tech))
+    for project in profile.projects:
+        for tech in project.tech_stack:
+            terms.update(_expand_skill(tech))
     for role in (*profile.preferred_roles, profile.role):
         terms.update(_tokens(role))
     return terms
@@ -151,93 +120,25 @@ def role_search_terms(profile: UserProfile) -> list[str]:
     return roles
 
 
-def search_queries(profile: UserProfile) -> list[str]:
-    """Distinct search strings for job board APIs (most specific first)."""
-    from services.job_fields import effective_fields, search_queries_for_fields
-
-    return search_queries_for_fields(effective_fields(profile), profile)
-
-
 def _word_boundary_hit(term: str, haystack: str) -> bool:
-    if len(term) < 2:
-        return False
-    if term in _SHORT_SKILL_TERMS:
-        pattern = rf"\b{re.escape(term)}\b"
-        return bool(re.search(pattern, haystack, re.IGNORECASE))
     if len(term) <= 2:
         return False
     pattern = rf"\b{re.escape(term)}\b"
     return bool(re.search(pattern, haystack, re.IGNORECASE))
 
 
-def _aiml_hits(text: str) -> int:
-    lowered = text.lower()
-    hits = 0
-    for term in _AIML_STRONG_TERMS:
-        if " " in term:
-            if term in lowered:
-                hits += 1
-        elif _word_boundary_hit(term, lowered):
-            hits += 1
-    return hits
-
-
-def is_excluded_job_title(title: str) -> bool:
-    lowered = (title or "").lower()
-    return any(re.search(p, lowered) for p in _EXCLUDED_TITLE_PATTERNS)
-
-
-def _profile_is_aiml_focused(profile: UserProfile) -> bool:
-    blob = " ".join([*profile.preferred_roles, profile.role, *profile.skills]).lower()
-    return any(
-        term in blob
-        for term in (
-            "ai",
-            "ml",
-            "machine learning",
-            "aiml",
-            "llm",
-            "deep learning",
-            "pytorch",
-            "tensorflow",
-            "langchain",
-        )
-    )
-
-
-def is_relevant_job_posting(job: JobListing, profile: UserProfile) -> bool:
-    """Strict gate: is this job posting in the right domain for this profile?"""
-    if is_excluded_job_title(job.title):
-        return False
-
-    if has_unrelated_enterprise_stack(job, profile):
-        return False
-
-    from services.job_fields import effective_fields, job_matches_any_field
-
-    fields = effective_fields(profile)
-    if job_matches_any_field(job, fields, profile):
-        return True
-
-    return role_relevant(job, profile)
-
-
-def matches_scrape_keywords(job: JobListing, profile: UserProfile) -> bool:
-    """Used during scraping to drop obvious noise before the filter stage."""
-    return is_relevant_job_posting(job, profile)
-
-
 def skill_hits_in_text(profile: UserProfile, text: str) -> int:
     haystack = text.lower()
     hits = 0
     seen: set[str] = set()
-    for skill in profile.skills:
+    for skill in profile.all_skills():
         for term in _expand_skill(skill):
             if term in seen:
                 continue
             if _word_boundary_hit(term, haystack):
                 hits += 1
                 seen.add(term)
+                break
     return hits
 
 
@@ -248,17 +149,16 @@ _TECH_ROLE_WORDS = frozenset(
 
 def role_relevant(job: JobListing, profile: UserProfile) -> bool:
     """Job title/description should align with target roles or core skills."""
-    if is_excluded_job_title(job.title):
-        return False
-
-    haystack = f"{job.title} {job.description} {' '.join(job.skills)}".lower()
+    haystack = (
+        f"{job.title} {job.description} {job.requirements} {' '.join(job.skills)}"
+    ).lower()
     roles = role_search_terms(profile)
 
     role_hit = any(
         _word_boundary_hit(token, haystack)
         for role in roles
         for token in _tokens(role)
-        if len(token) >= 2
+        if len(token) > 2
     )
     if role_hit:
         return True
@@ -269,16 +169,15 @@ def role_relevant(job: JobListing, profile: UserProfile) -> bool:
     ):
         return True
 
-    if skill_hits_in_text(profile, haystack) >= 2:
-        return True
-
-    return False
+    return skill_hits_in_text(profile, haystack) >= 2
 
 
 def has_unrelated_enterprise_stack(job: JobListing, profile: UserProfile) -> bool:
     """True when the job is dominated by enterprise tech the candidate does not have."""
     profile_terms = profile_skill_terms(profile)
-    haystack = f"{job.title} {job.description} {' '.join(job.skills)}".lower()
+    haystack = (
+        f"{job.title} {job.description} {job.requirements} {' '.join(job.skills)}"
+    ).lower()
 
     for stack in _UNRELATED_ENTERPRISE:
         if stack not in haystack:
@@ -304,8 +203,11 @@ def filter_matched_skills(profile: UserProfile, claimed: list[str]) -> list[str]
 
 def deterministic_skill_overlap(profile: UserProfile, job: JobListing) -> int:
     """0-100 score from word-boundary skill overlap between profile and job."""
-    haystack = f"{job.title} {job.description} {' '.join(job.skills)}"
-    if not profile.skills:
+    haystack = (
+        f"{job.title} {job.description} {job.requirements} {' '.join(job.skills)}"
+    )
+    skills = profile.all_skills()
+    if not skills:
         return 0
     hits = skill_hits_in_text(profile, haystack)
-    return min(100, int(100 * hits / max(len(profile.skills), 1)))
+    return min(100, int(100 * hits / max(len(skills), 1)))
