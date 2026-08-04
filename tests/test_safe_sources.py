@@ -24,21 +24,28 @@ def _recent_iso() -> str:
     return (datetime.utcnow() - timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def test_captcha_prone_sources_disabled_by_default():
+def test_glassdoor_still_off_by_default():
     by_id = {s["id"]: s for s in POPULAR_JOB_SITES}
-    for sid in ("indeed", "linkedin", "glassdoor"):
+    assert by_id["glassdoor"]["safety"] == "disabled_captcha"
+    assert by_id["glassdoor"]["enabled_by_default"] is False
+
+
+def test_linkedin_indeed_on_by_default_but_captcha_tagged():
+    by_id = {s["id"]: s for s in POPULAR_JOB_SITES}
+    for sid in ("indeed", "linkedin"):
         assert by_id[sid]["safety"] == "disabled_captcha"
-        assert by_id[sid]["enabled_by_default"] is False
+        assert by_id[sid]["enabled_by_default"] is True
 
 
-def test_default_enabled_are_api_safe():
+def test_default_enabled_include_api_and_linkedin_indeed():
     enabled = set(default_enabled_source_ids())
     assert "remotive" in enabled
     assert "themuse" in enabled
     assert "weworkremotely" in enabled
     assert "workingnomads" in enabled
-    assert "linkedin" not in enabled
-    assert "indeed" not in enabled
+    assert "linkedin" in enabled
+    assert "indeed" in enabled
+    assert "glassdoor" not in enabled
 
 
 def test_resolve_allowlist_uses_profile_override():
