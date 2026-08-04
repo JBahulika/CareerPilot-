@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from core.logging import get_logger
 from models.schemas import JobListing, UserProfile
+from agents.job_sources.registry import resolve_enabled_sources
 from services.source_health import get_source_health_registry
 
 logger = get_logger(__name__)
@@ -24,11 +25,18 @@ class AggregateSource:
         flex_years: int | None = None,
     ) -> list[JobListing]:
         health = get_source_health_registry()
-        per_source = max(10, limit // max(len(self._sources), 1))
+        allowed = resolve_enabled_sources(profile)
+        active = [s for s in self._sources if s.name in allowed]
+        if not active:
+            logger.warning("Aggregate: allowlist empty after resolve; using defaults")
+            allowed = resolve_enabled_sources(None)
+            active = [s for s in self._sources if s.name in allowed]
+
+        per_source = max(10, limit // max(len(active), 1))
         all_jobs: list[JobListing] = []
         seen: set[str] = set()
 
-        for source in self._sources:
+        for source in active:
             if health.is_temporarily_blocked(source.name):
                 status = health.get(source.name).status
                 logger.info(f"Aggregate: skipping {source.name} ({status})")
