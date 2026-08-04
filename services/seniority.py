@@ -242,7 +242,28 @@ def infer_candidate_years(profile: UserProfile) -> float:
 
 
 def infer_candidate_tier(profile: UserProfile) -> int:
-    """Return candidate seniority tier (0-5)."""
+    """Return candidate seniority tier (0-5).
+
+    Prefer explicit target_years_min/max when set; otherwise fall back to the
+    experience_level string and work-history estimate.
+    """
+    if profile.target_years_min is not None and profile.target_years_max is not None:
+        mid = (profile.target_years_min + profile.target_years_max) / 2
+        if mid <= 1:
+            from_years = 0
+        elif mid <= 2.5:
+            from_years = 1
+        elif mid <= 5:
+            from_years = 2
+        elif mid <= 7:
+            from_years = 3
+        else:
+            from_years = 4
+        from_history = _years_from_work_history(profile)
+        if from_history is not None:
+            return min(from_years, from_history)
+        return from_years
+
     from_level = _parse_years_from_level(profile.experience_level)
     from_history = _years_from_work_history(profile)
 

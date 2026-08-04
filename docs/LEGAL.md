@@ -31,8 +31,10 @@ disable sources you are not comfortable using.
 CareerPilot’s policy:
 
 - **Do not** integrate captcha solvers or anti-bot bypass kits
-- If a source returns a captcha or challenge page, **abort that source**
 - **Do not** defeat login walls, device checks, or other access controls
+- Playwright scrapers are **best-effort**: they parse listing cards when present.
+  Challenge pages typically yield zero cards (no bypass). HTTP API clients may
+  still mark a source unhealthy on clear challenge responses.
 
 Browser-like headers, delays, and optional proxies are for polite, human-paced
 traffic — not for circumventing blocks.

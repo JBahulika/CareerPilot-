@@ -1,6 +1,6 @@
 # CareerPilot AI
 
-**Version [`0.2.4`](VERSION)** · [Changelog](CHANGELOG.md) · [Upgrade notes](docs/UPGRADE_NOTES.md) · [Legal stance](docs/LEGAL.md)
+**Version [`0.2.11`](VERSION)** · [Changelog](CHANGELOG.md) · [Upgrade notes](docs/UPGRADE_NOTES.md) · [Legal stance](docs/LEGAL.md)
 
 An autonomous, **local-first** AI assistant that discovers relevant jobs, scores
 them against your resume, and generates ATS-friendly tailored resumes — all on
@@ -102,7 +102,7 @@ Then in the dashboard:
 2. **Profile** — upload your resume PDF; review the parsed profile.
 3. **Run Pipeline** — pick a source and top-N, then run.
 4. **Results** — browse ranked matches and download tailored resumes.
-5. **History** — see past runs.
+5. **Logs** — per-run scrape diagnostics (jobs per website, empty/failed boards).
 
 ## Configuration
 

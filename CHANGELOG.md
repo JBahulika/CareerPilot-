@@ -24,6 +24,116 @@ Do not ship feature work without a changelog line.
 - Phase 4+: WhatsApp/email digests, proxies, optional cookies, dedupe,
   skills-gap / cover-letter — see `docs/UPGRADE_NOTES.md`.
 
+## [0.2.11] — 2026-08-05
+
+### Fixed
+
+- Missing skills no longer list sales/GTM process (solution selling, champion
+  building, pre/post-sales activities). Concrete tech like SASE/SSE kept.
+- Principal / Lead / Staff / Partner titles hard-capped for entry profiles;
+  sales/solutions-engineer roles downranked for AI/ML IC profiles (e.g. SAARC
+  Cloudflare-style matches).
+
+### Changed
+
+- Results caption clarifies missing skills = tools/stacks, not soft/sales fluff.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.2.10] — 2026-08-05
+
+### Added
+
+- Smarter location matching: city aliases (Bangalore↔Bengaluru, Bombay↔Mumbai,
+  Delhi↔New Delhi, …), multi-city prefs, and state/country inference so you can
+  type a short city name. Scraper queries expand to `City, State, Country`.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.2.9] — 2026-08-05
+
+### Added
+
+- **Logs** page (renamed from History): per-run breakdown of jobs requested /
+  returned / kept per website, plus empty and error boards — for testing why
+  Results may show only one source (e.g. weworkremotely).
+- Pipeline `summary.scrape` stores Aggregate per-source report.
+
+### Changed
+
+- Removed sidebar caption “Local-first job discovery & resume tailoring.”
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.2.8] — 2026-08-05
+
+### Fixed
+
+- Matcher `missing_skills` no longer lists soft-skill fluff (English
+  communication, reliability, self-organization, etc.). Prompt +
+  `filter_missing_skills()` keep technical gaps only.
+- Entry-level candidates: senior/lead roles hard-capped to ≤20 match score
+  and Skip (prevents inflated LLM scores like ~74% on Senior roles).
+
+### Changed
+
+- Profile: experience is **min/max years only** (dropdown removed). Label like
+  “0-1 years” is derived on save for LLM/storage.
+- Run Pipeline: scrape control labeled **Max jobs to scrape (up to 2000)** with
+  live ≈per-board caption; Results label **Missing technical skills**.
+- Setup Enabled boards / health captions already reflect Playwright best-effort.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.2.7] — 2026-08-05
+
+### Changed
+
+- **Max jobs to scrape** UI/API ceiling raised from **300 → 2000**
+  (`SCRAPE_LIMIT_MAX` / `settings.scrape_limit_max`). Aggregate still splits
+  across boards (`per_source = max(10, limit ÷ n)`); e.g. 1300 ≈ 100/board
+  with 13 sources.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.2.6] — 2026-08-05
+
+### Changed
+
+- Playwright scrapers (LinkedIn, Indeed, Naukri, Wellfound, Glassdoor) restored
+  to the **pre–Phase 2** best-effort style: open URL → wait → parse cards.
+  No captcha abort / health cooldown skip on those boards.
+- All Playwright boards are **on by default** again in Aggregate.
+- Profile allowlist still applies when set; leave Enabled boards empty for defaults.
+- Captchas are still never solved.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.2.5] — 2026-08-05
+
+### Fixed
+
+- Match step no longer crashes when Chroma returns NumPy arrays for `ids` /
+  `embeddings` (`The truth value of an array with more than one element is
+  ambiguous`). `vector_store` now converts those fields without boolean-
+  evaluating ndarrays.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
 ## [0.2.4] — 2026-08-05
 
 ### Changed

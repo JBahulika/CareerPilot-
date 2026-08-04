@@ -16,6 +16,8 @@ import httpx
 import streamlit as st
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+# Keep in sync with core.config Settings.scrape_limit_max
+SCRAPE_LIMIT_MAX = int(os.getenv("SCRAPE_LIMIT_MAX", "2000"))
 
 st.set_page_config(page_title="CareerPilot AI", page_icon="🧭", layout="wide")
 
@@ -32,21 +34,32 @@ def api_put(path: str, **kwargs):
     return httpx.put(f"{API_BASE_URL}{path}", timeout=60, **kwargs)
 
 
-EXPERIENCE_LEVEL_OPTIONS = [
-    "Fresher",
-    "0-1 years",
-    "1-3 years",
-    "3-5 years",
-    "5+ years",
-]
+def _label_from_years(ymin: int, ymax: int) -> str:
+    lo, hi = int(ymin), int(ymax)
+    if hi < lo:
+        lo, hi = hi, lo
+    if hi <= 0:
+        return "Fresher"
+    if lo == 0 and hi <= 1:
+        return "0-1 years"
+    if hi >= 15 and lo >= 5:
+        return "5+ years"
+    return f"{lo}-{hi} years"
 
-_EXPERIENCE_YEAR_DEFAULTS = {
-    "Fresher": (0, 0),
-    "0-1 years": (0, 1),
-    "1-3 years": (1, 3),
-    "3-5 years": (3, 5),
-    "5+ years": (5, 15),
-}
+
+def _years_from_legacy_level(level: str | None) -> tuple[int, int]:
+    text = (level or "").strip().lower()
+    if text in ("fresher", "fresh graduate", "new grad", "student") or "intern" in text:
+        return 0, 0
+    if "0-1" in text or "0 - 1" in text:
+        return 0, 1
+    if "1-3" in text:
+        return 1, 3
+    if "3-5" in text:
+        return 3, 5
+    if "5+" in text or text.startswith("5"):
+        return 5, 15
+    return 0, 1
 
 
 def _api_reachable() -> bool:
@@ -222,42 +235,45 @@ def page_profile() -> None:
     st.subheader("Your search preferences")
     st.caption("Everything below is saved once and reused by Run Pipeline and the morning scan.")
 
-    current_level = profile.get("experience_level") or "Fresher"
-    level_options = (
-        [current_level, *EXPERIENCE_LEVEL_OPTIONS]
-        if current_level not in EXPERIENCE_LEVEL_OPTIONS
-        else EXPERIENCE_LEVEL_OPTIONS
-    )
-    selected_level = st.selectbox(
-        "Experience level",
-        level_options,
-        index=level_options.index(current_level),
-        help="Used for seniority filtering. Pick what best matches your resume.",
-    )
-    defaults = _EXPERIENCE_YEAR_DEFAULTS.get(selected_level, (0, 2))
+    saved_ymin = profile.get("target_years_min")
+    saved_ymax = profile.get("target_years_max")
+    if saved_ymin is None and saved_ymax is None:
+        saved_ymin, saved_ymax = _years_from_legacy_level(profile.get("experience_level"))
+
     exp_col1, exp_col2 = st.columns(2)
     ymin = exp_col1.number_input(
-        "Target years (min)",
+        "Experience years (min)",
         0,
         20,
-        int(profile.get("target_years_min") if profile.get("target_years_min") is not None else defaults[0]),
+        int(saved_ymin if saved_ymin is not None else 0),
+        help="Lowest years of experience you want jobs to target.",
     )
     ymax = exp_col2.number_input(
-        "Target years (max)",
+        "Experience years (max)",
         0,
         20,
-        int(profile.get("target_years_max") if profile.get("target_years_max") is not None else defaults[1]),
+        int(saved_ymax if saved_ymax is not None else max(int(ymin), 1)),
+        help="Highest years of experience you will consider.",
     )
+    if int(ymax) < int(ymin):
+        st.warning("Max years is below min - they will be swapped on save.")
+        ymin, ymax = int(ymax), int(ymin)
+    level_label = _label_from_years(int(ymin), int(ymax))
     st.caption(
-        f"**{selected_level}** → target **{ymin}–{ymax} years**. "
+        f"Target band **{int(ymin)}-{int(ymax)} years** "
+        f'(saved as "{level_label}"). '
         "Jobs outside this band are dropped unless stretch is enabled."
     )
 
     preferred_loc = st.text_input(
         "Preferred job location",
         value=profile.get("preferred_location") or profile.get("location") or "",
-        placeholder="e.g. Bangalore, Mumbai, Remote",
-        help="City or region. Remote jobs are included when the checkbox below is on.",
+        placeholder="e.g. Bangalore, Mumbai, Delhi (aliases OK)",
+        help=(
+            "Short city names are enough. Bangalore/Bengaluru, Bombay/Mumbai, "
+            "Delhi/New Delhi; state/country are inferred. "
+            "Comma-separate multiple cities."
+        ),
     )
     include_remote = st.checkbox(
         "Include remote jobs",
@@ -322,11 +338,11 @@ def page_profile() -> None:
         source_ids,
         default=default_sel,
         format_func=lambda x: labels.get(x, x),
-        help="Leave empty to use built-in safe defaults (API sources only).",
+        help="Leave empty to use built-in defaults (API + Playwright boards).",
     )
 
     if st.button("Save profile", type="primary"):
-        profile["experience_level"] = selected_level
+        profile["experience_level"] = _label_from_years(int(ymin), int(ymax))
         profile["target_years_min"] = int(ymin)
         profile["target_years_max"] = int(ymax)
         profile["preferred_location"] = preferred_loc.strip()
@@ -364,8 +380,9 @@ Settings come from your **Profile** (experience, location, strict/stretch rules)
         profile.get("min_match_score") if profile.get("min_match_score") is not None else 60
     )
     st.info(
-        f"Using profile: **{profile.get('experience_level')}** "
-        f"({profile.get('target_years_min', 0)}–{profile.get('target_years_max', 1)} yrs) · "
+        f"Using profile: **{profile.get('target_years_min', 0)}-"
+        f"{profile.get('target_years_max', 1)} yrs** "
+        f"({profile.get('experience_level') or '-'}) | "
         f"roles: {', '.join(profile.get('preferred_roles', [])[:3]) or profile.get('role', '—')} · "
         f"location: **{loc}** · remote: **{remote}** · "
         f"min match: **{saved_threshold}%** · "
@@ -411,7 +428,31 @@ Settings come from your **Profile** (experience, location, strict/stretch rules)
         index=source_options.index("all") if "all" in source_options else 0,
         format_func=lambda x: source_labels.get(x, x),
     )
-    scrape_limit = col3.number_input("Max jobs to scrape", 10, 300, 100, step=10)
+    scrape_limit = col3.number_input(
+        f"Max jobs to scrape (up to {SCRAPE_LIMIT_MAX})",
+        min_value=10,
+        max_value=SCRAPE_LIMIT_MAX,
+        value=100,
+        step=50,
+        help=(
+            f"Total cap after Aggregate (max {SCRAPE_LIMIT_MAX}). Split across "
+            "enabled boards as max(10, limit / boards). "
+            "Example: 1300 with 13 boards ~ 100 each."
+        ),
+    )
+    if source == "all":
+        enabled = profile.get("enabled_sources") or []
+        n_boards = len(enabled) if enabled else 13
+        per = max(10, int(scrape_limit) // max(n_boards, 1))
+        warn = ""
+        if int(scrape_limit) >= 800:
+            warn = " High values with Playwright boards can be slow."
+        st.caption(
+            f"Aggregate ~ **{per}** jobs asked per board "
+            f"({n_boards} boards"
+            + (" from your allowlist" if enabled else " ~ default-on sources")
+            + f").{warn}"
+        )
 
     with st.expander("Override for this run only (optional)"):
         run_location = st.text_input(
@@ -428,7 +469,7 @@ Settings come from your **Profile** (experience, location, strict/stretch rules)
             0,
             100,
             saved_threshold,
-            help="Does not change your saved Profile threshold unless you save it there.",
+            help="Only keep matches at or above this %. Does not change saved Profile threshold unless you save it there.",
         )
         recent_days = st.slider(
             "Only jobs posted in last N days",
@@ -574,6 +615,11 @@ def page_results() -> None:
         st.info("No matches for this run yet (none passed filters and min match score).")
         return
 
+    st.caption(
+        "Missing technical skills = tools, stacks, protocols, certs - "
+        "not soft skills or sales/process duties."
+    )
+
     for m in matches:
         with st.container(border=True):
             head = f"{m['title']} — {m['company']}  ·  Match {m['match_score']}%"
@@ -585,8 +631,10 @@ def page_results() -> None:
                 + (f" · {posted_label}" if posted_label else "")
             )
             cols = st.columns(2)
-            cols[0].write("**Matched:** " + ", ".join(m.get("matched_skills", [])) or "—")
-            cols[1].write("**Missing:** " + ", ".join(m.get("missing_skills", [])) or "—")
+            matched = ", ".join(m.get("matched_skills", [])) or "-"
+            missing = ", ".join(m.get("missing_skills", [])) or "-"
+            cols[0].write(f"**Matched skills:** {matched}")
+            cols[1].write(f"**Missing technical skills:** {missing}")
             if m.get("reasons"):
                 st.write("\n".join(f"- {r}" for r in m["reasons"]))
             if m.get("apply_url"):
@@ -603,11 +651,15 @@ def page_results() -> None:
                     )
 
 
-def page_history() -> None:
-    st.header("History")
+def page_logs() -> None:
+    st.header("Logs")
+    st.caption(
+        "Per-run scrape diagnostics: jobs per website, empty boards, and access errors. "
+        "Use this to see why Results may show only one source (e.g. weworkremotely)."
+    )
     resp = api_get("/pipeline/runs")
     if resp.status_code != 200:
-        st.error("Could not load history.")
+        st.error("Could not load logs.")
         return
     runs = resp.json().get("runs", [])
     if not runs:
@@ -617,8 +669,11 @@ def page_history() -> None:
     display_rows = []
     for run in runs:
         summary = run.get("summary") or {}
+        scrape = summary.get("scrape") or {}
         excl = summary.get("filter_exclusions") or {}
         excl_bits = [f"{k}:{v}" for k, v in sorted(excl.items()) if v]
+        errors = scrape.get("sources_error") or []
+        empty = scrape.get("sources_empty") or []
         display_rows.append(
             {
                 "id": run.get("id"),
@@ -627,6 +682,9 @@ def page_history() -> None:
                 "matched": run.get("jobs_matched"),
                 "pdfs": run.get("pdfs_generated"),
                 "min_%": summary.get("min_match_score"),
+                "sources_ok": ", ".join(scrape.get("sources_with_jobs") or []) or "-",
+                "sources_empty": len(empty),
+                "sources_error": len(errors),
                 "location": summary.get("location") or "",
                 "exclusions": "; ".join(excl_bits) if excl_bits else "",
                 "started_at": run.get("started_at"),
@@ -634,25 +692,93 @@ def page_history() -> None:
             }
         )
     st.dataframe(display_rows, use_container_width=True)
-    st.caption(
-        "Exclusions summarize filter drops (location, experience, etc.). "
-        "Matched jobs already cleared the min match score for that run."
+
+    st.subheader("Run detail")
+    run_ids = [r.get("id") for r in runs if r.get("id") is not None]
+    selected = st.selectbox(
+        "Inspect run",
+        run_ids,
+        format_func=lambda i: f"Run #{i}",
     )
+    run = next((r for r in runs if r.get("id") == selected), None)
+    if not run:
+        return
+
+    summary = run.get("summary") or {}
+    scrape = summary.get("scrape") or {}
+    per = scrape.get("per_source") or []
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Scraped", run.get("jobs_scraped") or 0)
+    c2.metric("Matched", run.get("jobs_matched") or 0)
+    c3.metric("PDFs", run.get("pdfs_generated") or 0)
+    c4.metric("Min match %", summary.get("min_match_score") or "-")
+
+    if scrape.get("sources_error"):
+        st.error(
+            "Could not access / scrape failed: " + ", ".join(scrape["sources_error"])
+        )
+    if scrape.get("sources_empty"):
+        st.warning(
+            "Returned 0 jobs (blocked, no listings, or filtered out at source): "
+            + ", ".join(scrape["sources_empty"])
+        )
+    if scrape.get("sources_skipped"):
+        st.info(
+            "Skipped (not in allowlist/defaults): "
+            + ", ".join(scrape["sources_skipped"])
+        )
+    if scrape.get("sources_with_jobs"):
+        st.success(
+            "Sources that contributed jobs: "
+            + ", ".join(scrape["sources_with_jobs"])
+        )
+
+    if per:
+        st.markdown("**Per-website scrape**")
+        st.dataframe(
+            [
+                {
+                    "source": row.get("id"),
+                    "status": row.get("status"),
+                    "requested": row.get("requested"),
+                    "returned": row.get("returned"),
+                    "kept_after_recency": row.get("kept_after_recency"),
+                    "detail": row.get("detail") or "",
+                    "sample_titles": "; ".join(row.get("sample_titles") or []),
+                }
+                for row in per
+            ],
+            use_container_width=True,
+        )
+    else:
+        st.info(
+            "No per-source breakdown for this run (older runs before Logs upgrade). "
+            "Re-run the pipeline to capture website-level stats."
+        )
+
+    excl = summary.get("filter_exclusions") or {}
+    if excl:
+        st.markdown("**Filter exclusions**")
+        st.json(excl)
+
+    if run.get("errors"):
+        st.markdown("**Run errors**")
+        st.warning("\n".join(run["errors"]))
 
 
 def main() -> None:
-    st.sidebar.title("🧭 CareerPilot AI")
+    st.sidebar.title("CareerPilot AI")
     page = st.sidebar.radio(
         "Navigate",
-        ["Setup", "Profile", "Run Pipeline", "Results", "History"],
+        ["Setup", "Profile", "Run Pipeline", "Results", "Logs"],
     )
-    st.sidebar.caption("Local-first job discovery & resume tailoring.")
     st.sidebar.markdown(
         "**Quick start**\n"
-        "1. Setup — check Ollama\n"
-        "2. Profile — upload & save\n"
+        "1. Setup - check Ollama\n"
+        "2. Profile - upload and save\n"
         "3. Run Pipeline\n"
-        "4. Results — download PDFs"
+        "4. Results - download PDFs"
     )
 
     {
@@ -660,7 +786,7 @@ def main() -> None:
         "Profile": page_profile,
         "Run Pipeline": page_run,
         "Results": page_results,
-        "History": page_history,
+        "Logs": page_logs,
     }[page]()
 
 

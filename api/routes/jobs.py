@@ -39,7 +39,7 @@ def job_sources_health() -> dict:
 
 @router.post("/scrape")
 def scrape_jobs(
-    limit: int = Query(100, ge=1, le=300),
+    limit: int = Query(100, ge=1, le=settings.scrape_limit_max),
     source: Optional[str] = Query(None, description="remotive | wellfound"),
 ) -> dict:
     result = get_latest_profile()
