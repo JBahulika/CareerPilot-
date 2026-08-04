@@ -7,8 +7,24 @@ venv/
 env/
 .pytest_cache/
 
-# Environment
+# Environment & secrets
 .env
+.env.*
+!.env.example
+
+# Cookies / sessions (never commit)
+data/cookies/
+**/cookies/*.txt
+**/cookies/*.json
+*.cookie
+cookies.txt
+
+# Proxy lists that may contain credentials
+proxies.txt
+proxy.txt
+data/proxies/
+**/*proxies*secret*
+**/*proxy*secret*
 
 # Local data (privacy: resumes never leave the machine)
 resumes/*
@@ -29,4 +45,8 @@ chroma/
 .idea/
 .vscode/
 
+# Local virtualenvs
 cenv/
+ui/cenv/
+.venv/
+venv/

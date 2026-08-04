@@ -1,5 +1,7 @@
 # CareerPilot AI
 
+**Version [`0.2.0`](VERSION)** · [Changelog](CHANGELOG.md) · [Upgrade notes](docs/UPGRADE_NOTES.md) · [Legal stance](docs/LEGAL.md)
+
 An autonomous, **local-first** AI assistant that discovers relevant jobs, scores
 them against your resume, and generates ATS-friendly tailored resumes — all on
 your machine. Built as a multi-agent pipeline (LangGraph) over a local LLM
@@ -7,6 +9,14 @@ your machine. Built as a multi-agent pipeline (LangGraph) over a local LLM
 
 Your resume never leaves your machine: parsing, matching, and generation all run
 locally.
+
+## Changelog rule
+
+Every phase PR and merged upgrade **must** append an entry to
+[`CHANGELOG.md`](CHANGELOG.md) and a short bullet in
+[`docs/UPGRADE_NOTES.md`](docs/UPGRADE_NOTES.md). Do not merge feature work
+without those updates. Bump [`VERSION`](VERSION) (and the FastAPI `version` in
+`main.py`) when cutting a release.
 
 ## Pipeline
 
@@ -25,7 +35,8 @@ Each stage is a LangGraph node sharing one typed pipeline state. See
 | Frontend | Streamlit |
 | Agents | LangGraph |
 | LLM | Ollama (e.g. `qwen2.5:7b`) |
-| Embeddings | `BAAI/bge-small-en-v1.5` (sentence-transformers) |
+| Embeddings | `BAAI/bge-base-en-v1.5` (sentence-transformers) |
+| Reranker | `BAAI/bge-reranker-base` (optional, enabled by default) |
 | Vector DB | ChromaDB |
 | Storage | SQLite (SQLModel) |
 | Resume parsing | PyMuPDF |
@@ -145,13 +156,22 @@ agents/       # parser, scraper, filter, matcher, resume tailor, pdf, orchestrat
 api/routes/   # resume, jobs, pipeline endpoints
 core/         # config (Pydantic Settings) + logging (Loguru)
 database/     # SQLModel tables, session, repositories
+docs/         # LEGAL, UPGRADE_NOTES, phase docs
 models/       # Pydantic schemas shared across layers
 prompts/      # versioned LLM prompt templates
-services/     # embeddings, ChromaDB vector store, daily scheduler
+services/     # embeddings, hybrid search, ChromaDB, daily scheduler
 ui/           # Streamlit dashboard
 tests/        # unit + fixture-based tests
 main.py       # FastAPI entry point
+VERSION       # release version (Keep in sync with CHANGELOG)
+CHANGELOG.md  # Keep a Changelog history
 ```
+
+## Acceptable use
+
+See [`docs/LEGAL.md`](docs/LEGAL.md). Short version: prefer APIs; do not solve
+captchas or circumvent access controls; CareerPilot does **not** auto-apply —
+you choose applications. Not legal advice.
 
 ## Git auto-commit (gitwatch)
 
@@ -208,10 +228,18 @@ The Results page shows **10 jobs per page** by default (up to 15). Use Previous/
 
 API: `GET /jobs/matches/{run_id}?page=1&page_size=10`
 
-## Roadmap (post-MVP)
+## Roadmap (phased)
 
-- Additional job sources (Naukri, Indeed, LinkedIn, company pages)
-- WhatsApp Cloud API delivery
-- Auto-apply via browser automation
-- Cover letter and interview-prep agents
-- Multi-user SaaS dashboard
+Tracked in [`docs/UPGRADE_NOTES.md`](docs/UPGRADE_NOTES.md). High level:
+
+1. User-settable match threshold + location gating
+2. Safe scrape HTTP layer (no captcha bypass)
+3. More safe job sources + allowlist
+4. WhatsApp / email digests (human-in-the-loop; no auto-apply)
+5. Proxies, random scan windows, quiet hours
+6. Optional user cookies (advanced)
+7. Model pins + GitHub as source of truth
+8. Dedupe across runs
+9. Skills-gap + cover letter only after user selects a job
+
+**Out of scope:** captcha solvers, access-control circumvention, auto-apply.
