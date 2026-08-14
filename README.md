@@ -16,7 +16,7 @@ Every phase ships on a **dedicated GitHub branch** (e.g. `phase-2-…`), then
 merges to `main`. **Keep prior phase branches** on GitHub as backups — do not
 delete them after merge.
 
-Each phase **must** update:
+Each phase **must** update:-
 
 | Artifact | What to update |
 |----------|----------------|
