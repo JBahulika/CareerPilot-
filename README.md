@@ -10,7 +10,7 @@ your machine. Built as a multi-agent pipeline (LangGraph) over a local LLM
 Your resume never leaves your machine: parsing, matching, and generation all run
 locally.
 
-## Changelog rule!
+## Changelog rule
 
 Every phase ships on a **dedicated GitHub branch** (e.g. `phase-2-…`), then
 merges to `main`. **Keep prior phase branches** on GitHub as backups — do not
