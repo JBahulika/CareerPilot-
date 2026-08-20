@@ -31,7 +31,6 @@ def test_relevant_entry_job_scores_higher_than_offtopic():
         description="Work on PyTorch and NLP models. Python required.",
         skills=["Python", "PyTorch", "NLP"],
         location="Remote",
-        remote=True,
         posted_at=datetime.utcnow(),
     )
     bad = build_job(
@@ -50,7 +49,7 @@ def test_excluded_title_scores_zero():
     job = build_job(
         source="test",
         company="Acme",
-        title="Proposal Manager",
+        title="Sales Manager",
         description="Manage proposals and RFPs.",
         posted_at=datetime.utcnow(),
     )
@@ -66,7 +65,6 @@ def test_recent_job_beats_stale_equivalent():
         description="PyTorch, NLP, Python.",
         skills=["Python", "PyTorch"],
         location="Remote",
-        remote=True,
     )
     fresh = build_job(**common, posted_at=datetime.utcnow())
     stale = build_job(**common, posted_at=datetime.utcnow() - timedelta(days=25))

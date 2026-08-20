@@ -47,12 +47,18 @@ and notification stay human-in-the-loop.
 
 ## Cookies and accounts
 
-If you optionally supply session cookies for a board:
+Optional board cookies are an **advanced** feature (Phase 6). If you supply
+session cookies for a board:
 
-- They must be **your** cookies from a session you control
-- Aggressive use can get **your** account restricted or banned
-- Prefer API sources; treat cookie mode as advanced and high-risk
-- Never commit cookies or tokens to git
+- They must be **your** cookies from a browser session **you** control
+- Store them only under ``data/cookies/`` (gitignored) — **never commit** cookie
+  files, tokens, or exports to git
+- Aggressive or automated use can get **your** account restricted or banned
+- Prefer official APIs / public feeds; treat cookie mode as high-risk
+- CareerPilot applies **stricter rate limits** when cookies are attached
+- Cookies do **not** authorize captcha solving, login-wall bypass, or auto-apply
+
+See README (Phase 6 settings) and `docs/examples/cookies.example.md`.
 
 ## Privacy
 

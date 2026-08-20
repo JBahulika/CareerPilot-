@@ -2,7 +2,9 @@
 
 Wires the agents into a LangGraph state machine:
 
-    scrape -> filter -> match -> tailor+pdf -> complete
+    scrape -> filter -> match -> [optional tailor+pdf] -> complete
+
+Resume PDF tailoring is controlled by ``TAILOR_RESUMES_ENABLED`` (default off).
 
 The graph shares one typed ``PipelineState``. Each node updates the persisted
 ``pipeline_runs`` row so the API/UI can report live progress. Errors in a node
@@ -61,6 +63,7 @@ class PipelineState(TypedDict, total=False):
     min_match_score: Optional[int]
     jobs: list[JobListing]
     filtered_jobs: list[JobListing]
+    filter_rejected: list  # list[tuple[JobListing, str]]
     matches: list[MatchResult]
     generated_pdfs: list[str]
     errors: list[str]
@@ -129,14 +132,17 @@ def _filter_node(state: PipelineState) -> PipelineState:
             strict_experience=state.get("strict_experience", True),
             allow_stretch=state.get("allow_stretch", False),
             flex_years=state.get("flex_years"),
+            recent_days=state.get("recent_days"),
         )
         summary["filter_exclusions"] = result.exclusions
         summary["jobs_after_filter"] = len(result.jobs)
+        summary["jobs_filter_rejected"] = len(result.rejected)
         summary["location"] = effective_location(profile) or ""
         summary["include_remote"] = bool(profile.include_remote)
         update_run(state["run_id"], summary_json=summary)
         return {
             "filtered_jobs": result.jobs,
+            "filter_rejected": result.rejected,
             "current_step": "filter",
             "run_summary": summary,
         }
@@ -154,6 +160,8 @@ def _match_node(state: PipelineState) -> PipelineState:
     threshold = effective_min_match_score(profile, state.get("min_match_score"))
     summary = dict(state.get("run_summary") or {})
     try:
+        from services.browse_matches import merge_browse_matches
+
         matches = _matcher.run(
             profile,
             state.get("filtered_jobs", []),
@@ -163,11 +171,24 @@ def _match_node(state: PipelineState) -> PipelineState:
             flex_years=state.get("flex_years"),
             min_match_score=threshold,
         )
+        stats = dict(getattr(_matcher, "last_match_stats", None) or {})
+        above = int(stats.get("above_threshold", 0))
+        # Keep filter-rejected / unscored scrapes visible under low-match toggle
+        matches = merge_browse_matches(
+            matches,
+            state.get("jobs", []) or [],
+            state.get("filter_rejected", []) or [],
+            profile,
+            threshold=threshold,
+        )
+        above = sum(1 for m in matches if m.match_score >= threshold)
         summary["min_match_score"] = threshold
-        summary["jobs_matched"] = len(matches)
+        summary["jobs_matched"] = above
+        summary["jobs_viewable"] = len(matches)
+        summary["jobs_low_match"] = max(0, len(matches) - above)
         update_run(
             state["run_id"],
-            jobs_matched=len(matches),
+            jobs_matched=above,
             summary_json=summary,
         )
         return {
@@ -181,13 +202,24 @@ def _match_node(state: PipelineState) -> PipelineState:
 
 
 def _tailor_node(state: PipelineState) -> PipelineState:
+    """Optional resume PDF tailoring. Disabled by default (``TAILOR_RESUMES_ENABLED``)."""
+    matches = state.get("matches", [])
+    if not settings.tailor_resumes_enabled:
+        logger.info("Resume tailoring skipped (TAILOR_RESUMES_ENABLED=false)")
+        update_run(state["run_id"], current_step="tailor", pdfs_generated=0)
+        return {"generated_pdfs": [], "matches": matches}
+
     update_run(state["run_id"], current_step="tailor")
     profile = state["profile"]
-    matches = state.get("matches", [])
+    threshold = effective_min_match_score(profile, state.get("min_match_score"))
     pdfs: list[str] = []
     errors = list(state.get("errors", []))
+    # Only tailor strong matches (not optional low-match browse rows)
+    to_tailor = [m for m in matches if m.match_score >= threshold][
+        : state.get("top_n", settings.top_n_jobs)
+    ]
 
-    for match in matches:
+    for match in to_tailor:
         try:
             tailored = _tailor.run(profile, match.job)
             pdf_path = _pdf.run(tailored, match.job)
@@ -210,13 +242,55 @@ def _persist_node(state: PipelineState) -> PipelineState:
     }
     save_matches(state["run_id"], matches, job_ids)
 
-    errors = state.get("errors", [])
+    errors = list(state.get("errors", []))
     summary = dict(state.get("run_summary") or {})
+    profile = state.get("profile")
+    # Best-effort Drive backup of run summary (does not block completion)
+    if profile is not None:
+        try:
+            from services.google_drive import maybe_backup_run_summary
+
+            maybe_backup_run_summary(profile, state["run_id"], summary)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"Drive run backup skipped: {exc}")
+
+    # Manual-run digest (before finish so UI can see digest_sent)
+    if summary.get("send_digest") and profile is not None:
+        try:
+            from database.repositories import get_matches_for_run
+            from services.notifier import get_notifier
+
+            threshold = int(summary.get("min_match_score") or 60)
+            fetch_limit = max(settings.top_n_jobs, settings.max_digest_jobs * 3, 30)
+            match_rows, _ = get_matches_for_run(
+                state["run_id"], offset=0, limit=fetch_limit, min_score=threshold
+            )
+            profile_id = None
+            try:
+                from database.repositories import get_run
+
+                run_meta = get_run(state["run_id"])
+                if run_meta:
+                    profile_id = run_meta.get("profile_id")
+            except Exception:  # noqa: BLE001
+                profile_id = None
+            sent = get_notifier(profile=profile).send_job_digest(
+                profile,
+                match_rows,
+                state["run_id"],
+                profile_id=profile_id,
+            )
+            summary["digest_sent"] = bool(sent)
+            logger.info(f"Run {state['run_id']} digest notified={sent}")
+        except Exception as exc:  # noqa: BLE001
+            summary["digest_sent"] = False
+            logger.warning(f"Run {state['run_id']} digest failed: {exc}")
+
     if summary:
         update_run(state["run_id"], summary_json=summary)
     status = RunStatus.COMPLETED.value if matches else RunStatus.FAILED.value
     finish_run(state["run_id"], status=status, errors=errors)
-    return {"current_step": "complete"}
+    return {"current_step": "complete", "run_summary": summary}
 
 
 def _build_graph():
@@ -253,8 +327,14 @@ def run_pipeline(
     include_remote: Optional[bool] = None,
     recent_days: Optional[int] = None,
     min_match_score: Optional[int] = None,
+    send_digest: bool = False,
 ) -> None:
-    """Execute the full pipeline. Intended to run as a background task."""
+    """Execute the full pipeline. Intended to run as a background task.
+
+    When ``send_digest`` is True, sends a WhatsApp/email/local digest after the
+    run (same format as the morning scan). Daily scan usually sets this False
+    and notifies itself after fetching matches.
+    """
     logger.info(f"Pipeline run {run_id} starting")
     threshold = effective_min_match_score(profile, min_match_score)
     initial: PipelineState = {
@@ -293,6 +373,7 @@ def run_pipeline(
                 if include_remote is not None
                 else profile.include_remote
             ),
+            "send_digest": bool(send_digest),
         },
         "errors": [],
     }

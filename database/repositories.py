@@ -50,7 +50,7 @@ def get_latest_profile() -> Optional[tuple[int, UserProfile]]:
 
 # --- Jobs ---------------------------------------------------------------------
 def upsert_jobs(jobs: list[JobListing]) -> list[int]:
-    """Insert jobs, skipping duplicates by content hash. Returns stored IDs."""
+    """Insert jobs, refreshing metadata on duplicates. Returns stored IDs."""
     stored_ids: list[int] = []
     with get_session() as session:
         for job in jobs:
@@ -58,6 +58,23 @@ def upsert_jobs(jobs: list[JobListing]) -> list[int]:
                 select(JobRow).where(JobRow.content_hash == job.content_hash)
             ).first()
             if existing is not None:
+                # Keep the earliest known post date (true listing age for UI/recency).
+                incoming = job.posted_at or job.scraped_at
+                if incoming is not None:
+                    if existing.posted_at is None or incoming < existing.posted_at:
+                        existing.posted_at = incoming
+                if job.experience:
+                    existing.experience = job.experience
+                if job.apply_url:
+                    existing.apply_url = job.apply_url
+                if job.location:
+                    existing.location = job.location
+                if job.description and len(job.description) > len(existing.description or ""):
+                    existing.description = job.description
+                if job.skills:
+                    existing.skills_json = job.skills
+                existing.scraped_at = job.scraped_at or existing.scraped_at
+                session.add(existing)
                 stored_ids.append(existing.id)
                 continue
             row = JobRow(
@@ -138,11 +155,49 @@ def save_matches(run_id: int, matches: list[MatchResult], job_ids: dict[str, int
             session.add(row)
 
 
+def get_match_detail(run_id: int, match_id: int) -> Optional[dict]:
+    """Return one match + job for a run (Phase 9 assist + Phase 10a still-hiring)."""
+    with get_session() as session:
+        row = session.exec(
+            select(MatchRow, JobRow)
+            .join(JobRow, MatchRow.job_id == JobRow.id)
+            .where(MatchRow.id == match_id, MatchRow.run_id == run_id)
+        ).first()
+        if row is None:
+            return None
+        match_row, job_row = row
+        posted = job_row.posted_at
+        detail = {
+            "match_id": match_row.id,
+            "job_id": job_row.id,
+            "run_id": run_id,
+            "content_hash": job_row.content_hash,
+            "company": job_row.company,
+            "title": job_row.title,
+            "source": job_row.source,
+            "location": job_row.location,
+            "experience": job_row.experience,
+            "description": job_row.description or "",
+            "apply_url": job_row.apply_url,
+            "posted_at": posted.isoformat() if posted else None,
+            "match_score": match_row.match_score,
+            "scores": match_row.scores_json or {},
+            "matched_skills": match_row.matched_skills_json or [],
+            "missing_skills": match_row.missing_skills_json or [],
+            "reasons": match_row.reasons_json or [],
+            "recommendation": match_row.recommendation,
+        }
+        from services.still_hiring import annotate_match_still_hiring
+
+        return annotate_match_still_hiring(detail)
+
+
 def get_matches_for_run(
     run_id: int,
     *,
     offset: int = 0,
     limit: Optional[int] = None,
+    min_score: int | None = None,
 ) -> tuple[list[dict], int]:
     with get_session() as session:
         base_query = (
@@ -152,22 +207,26 @@ def get_matches_for_run(
             .order_by(MatchRow.match_score.desc())
         )
         rows = session.exec(base_query).all()
-        total = len(rows)
-        if offset:
-            rows = rows[offset:]
-        if limit is not None:
-            rows = rows[:limit]
+        if min_score is not None:
+            floor = max(0, int(min_score))
+            rows = [r for r in rows if r[0].match_score >= floor]
 
         results = []
         for match_row, job_row in rows:
-            posted = job_row.posted_at or job_row.scraped_at
+            # Phase 10a: expose real posted_at only — never substitute scraped_at
+            # (that would invent a "fresh" date for still-hiring).
+            posted = job_row.posted_at
             results.append(
                 {
+                    "match_id": match_row.id,
+                    "job_id": job_row.id,
+                    "content_hash": job_row.content_hash,
                     "company": job_row.company,
                     "title": job_row.title,
                     "source": job_row.source,
                     "location": job_row.location,
                     "experience": job_row.experience,
+                    "description": (job_row.description or "")[:2000],
                     "apply_url": job_row.apply_url,
                     "posted_at": posted.isoformat() if posted else None,
                     "match_score": match_row.match_score,
@@ -179,6 +238,16 @@ def get_matches_for_run(
                     "generated_pdf_path": match_row.generated_pdf_path,
                 }
             )
+        from services.still_hiring import annotate_match_still_hiring, prefer_still_hiring
+
+        results = prefer_still_hiring(
+            [annotate_match_still_hiring(r) for r in results]
+        )
+        total = len(results)
+        if offset:
+            results = results[offset:]
+        if limit is not None:
+            results = results[:limit]
         return results, total
 
 

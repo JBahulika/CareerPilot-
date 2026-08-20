@@ -34,6 +34,9 @@ class RunRequest(BaseModel):
     location: Optional[str] = None
     include_remote: Optional[bool] = None
     min_match_score: Optional[int] = None  # per-run override; None = profile/default
+    focus_field: Optional[str] = None  # per-run override; None = use profile
+    # None = use profile.notify_on_manual_run; True/False = force for this run
+    send_digest: Optional[bool] = None
 
 
 @router.post("/run")
@@ -41,6 +44,20 @@ def start_pipeline(request: RunRequest, background_tasks: BackgroundTasks) -> di
     profile = get_profile(request.profile_id)
     if profile is None:
         raise HTTPException(status_code=404, detail="Profile not found.")
+
+    if request.focus_field is not None:
+        from services.skills import normalize_focus_field
+
+        profile = profile.model_copy(
+            update={"focus_field": normalize_focus_field(request.focus_field)}
+        )
+
+    from services.notify_config import resolve_send_digest
+
+    send_digest = resolve_send_digest(
+        request_send_digest=request.send_digest,
+        profile=profile,
+    )
 
     run_id = create_run(request.profile_id)
     background_tasks.add_task(
@@ -58,8 +75,9 @@ def start_pipeline(request: RunRequest, background_tasks: BackgroundTasks) -> di
         location=request.location,
         include_remote=request.include_remote,
         min_match_score=request.min_match_score,
+        send_digest=send_digest,
     )
-    return {"run_id": run_id, "status": "pending"}
+    return {"run_id": run_id, "status": "pending", "send_digest": send_digest}
 
 
 @router.get("/runs")

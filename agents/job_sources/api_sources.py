@@ -6,14 +6,16 @@ from agents.job_sources.common import (
     annotate_and_filter_jobs,
     build_job,
     parse_posted_at,
-    search_terms,
+    search_queries,
     sort_and_filter_recent,
+    split_limit_across_queries,
     strip_html,
 )
 from core.logging import get_logger
 from models.schemas import JobListing, UserProfile
 from services.scrape_http import CaptchaBlockedError, RateLimitedError, get_scrape_client
 from services.source_health import get_source_health_registry
+from services.skills import listing_matches_profile_keywords, skill_search_terms
 
 logger = get_logger(__name__)
 
@@ -22,35 +24,45 @@ class RemotiveSource:
     name = "remotive"
 
     def fetch(self, profile, limit, *, allow_stretch=False, flex_years=None) -> list[JobListing]:
-        query = search_terms(profile)
-        try:
-            raw = get_scrape_client().get_json(
-                "https://remotive.com/api/remote-jobs",
-                source_id=self.name,
-                params={"search": query, "limit": limit},
-            ).get("jobs", [])
-        except (CaptchaBlockedError, RateLimitedError) as exc:
-            logger.error(f"Remotive aborted: {exc}")
-            return []
-        except Exception as exc:  # noqa: BLE001
-            get_source_health_registry().record(self.name, "error", str(exc))
-            logger.error(f"Remotive failed: {exc}")
-            return []
+        queries = search_queries(profile)
+        quotas = split_limit_across_queries(limit, len(queries))
+        jobs: list[JobListing] = []
+        seen: set[str] = set()
+        for query, quota in zip(queries, quotas):
+            if quota <= 0 or len(jobs) >= limit:
+                break
+            try:
+                raw = get_scrape_client().get_json(
+                    "https://remotive.com/api/remote-jobs",
+                    source_id=self.name,
+                    params={"search": query, "limit": quota},
+                ).get("jobs", [])
+            except (CaptchaBlockedError, RateLimitedError) as exc:
+                logger.error(f"Remotive aborted: {exc}")
+                break
+            except Exception as exc:  # noqa: BLE001
+                get_source_health_registry().record(self.name, "error", str(exc))
+                logger.error(f"Remotive failed ({query!r}): {exc}")
+                continue
 
-        jobs = [
-            build_job(
-                source=self.name,
-                company=item.get("company_name", ""),
-                title=item.get("title", ""),
-                description=strip_html(item.get("description", "")),
-                skills=item.get("tags", []) or [],
-                location=item.get("candidate_required_location", "Remote"),
-                salary=item.get("salary", "") or "",
-                apply_url=item.get("url", ""),
-                posted_at=parse_posted_at(item.get("publication_date")),
-            )
-            for item in raw[:limit]
-        ]
+            for item in raw:
+                if len(jobs) >= limit:
+                    break
+                job = build_job(
+                    source=self.name,
+                    company=item.get("company_name", ""),
+                    title=item.get("title", ""),
+                    description=strip_html(item.get("description", "")),
+                    skills=item.get("tags", []) or [],
+                    location=item.get("candidate_required_location", "Remote"),
+                    salary=item.get("salary", "") or "",
+                    apply_url=item.get("url", ""),
+                    posted_at=parse_posted_at(item.get("publication_date")),
+                )
+                if job.content_hash in seen:
+                    continue
+                seen.add(job.content_hash)
+                jobs.append(job)
         return _finalize(jobs, profile, allow_stretch, flex_years, self.name)
 
 
@@ -73,15 +85,13 @@ class RemoteOKSource:
             logger.error(f"RemoteOK failed: {exc}")
             return []
 
-        query = search_terms(profile).lower()
         jobs: list[JobListing] = []
         for item in raw:
             if not isinstance(item, dict):
                 continue
             title = item.get("position") or item.get("title") or ""
             desc = strip_html(item.get("description", ""))
-            haystack = f"{title} {desc}".lower()
-            if query and not any(w in haystack for w in query.split() if len(w) > 2):
+            if not listing_matches_profile_keywords(profile, title, desc):
                 continue
             jobs.append(
                 build_job(
@@ -118,12 +128,11 @@ class ArbeitnowSource:
             logger.error(f"Arbeitnow failed: {exc}")
             return []
 
-        query = search_terms(profile).lower()
         jobs: list[JobListing] = []
         for item in raw:
             title = item.get("title", "")
             desc = strip_html(item.get("description", ""))
-            if query and not any(w in f"{title} {desc}".lower() for w in query.split() if len(w) > 2):
+            if not listing_matches_profile_keywords(profile, title, desc):
                 continue
             jobs.append(
                 build_job(
@@ -146,12 +155,17 @@ class JobicySource:
     name = "jobicy"
 
     def fetch(self, profile, limit, *, allow_stretch=False, flex_years=None) -> list[JobListing]:
-        query = search_terms(profile).split()[0] if search_terms(profile) else "engineer"
+        # Prefer a real skill/tag (python/dev) over truncated role tokens like "AI"
+        skills = skill_search_terms(profile, limit=3)
+        tag = "python" if "python" in {s.lower() for s in skills} else (
+            skills[0] if skills else "dev"
+        )
+        tag = tag.split()[0].lower()
         try:
             raw = get_scrape_client().get_json(
                 "https://jobicy.com/api/v2/remote-jobs",
                 source_id=self.name,
-                params={"count": limit, "tag": query},
+                params={"count": max(limit, 20), "tag": tag},
             ).get("jobs", [])
         except (CaptchaBlockedError, RateLimitedError) as exc:
             logger.error(f"Jobicy aborted: {exc}")
@@ -161,20 +175,27 @@ class JobicySource:
             logger.error(f"Jobicy failed: {exc}")
             return []
 
-        jobs = [
-            build_job(
-                source=self.name,
-                company=item.get("companyName", ""),
-                title=item.get("jobTitle", ""),
-                description=strip_html(item.get("jobDescription", "")),
-                skills=[item.get("jobIndustry", "")] if item.get("jobIndustry") else [],
-                location=item.get("jobGeo", "Remote"),
-                salary=item.get("annualSalaryMin", "") or "",
-                apply_url=item.get("url", ""),
-                posted_at=parse_posted_at(item.get("pubDate")),
+        jobs: list[JobListing] = []
+        for item in raw:
+            title = item.get("jobTitle", "")
+            desc = strip_html(item.get("jobDescription", ""))
+            if not listing_matches_profile_keywords(profile, title, desc):
+                continue
+            jobs.append(
+                build_job(
+                    source=self.name,
+                    company=item.get("companyName", ""),
+                    title=title,
+                    description=desc,
+                    skills=[item.get("jobIndustry", "")] if item.get("jobIndustry") else [],
+                    location=item.get("jobGeo", "Remote"),
+                    salary=item.get("annualSalaryMin", "") or "",
+                    apply_url=item.get("url", ""),
+                    posted_at=parse_posted_at(item.get("pubDate")),
+                )
             )
-            for item in raw[:limit]
-        ]
+            if len(jobs) >= limit:
+                break
         return _finalize(jobs, profile, allow_stretch, flex_years, self.name)
 
 
@@ -196,12 +217,11 @@ class HimalayasSource:
             logger.error(f"Himalayas failed: {exc}")
             return []
 
-        query = search_terms(profile).lower()
         jobs: list[JobListing] = []
         for item in raw:
             title = item.get("title", "")
             desc = strip_html(item.get("description", ""))
-            if query and not any(w in f"{title} {desc}".lower() for w in query.split() if len(w) > 2):
+            if not listing_matches_profile_keywords(profile, title, desc):
                 continue
             jobs.append(
                 build_job(
@@ -226,7 +246,6 @@ class TheMuseSource:
     name = "themuse"
 
     def fetch(self, profile, limit, *, allow_stretch=False, flex_years=None) -> list[JobListing]:
-        query = search_terms(profile).split()[0] if search_terms(profile) else "engineer"
         try:
             payload = get_scrape_client().get_json(
                 "https://www.themuse.com/api/public/jobs",
@@ -248,16 +267,12 @@ class TheMuseSource:
             return []
 
         jobs: list[JobListing] = []
-        q = query.lower()
         for item in raw:
             title = item.get("name") or ""
             company = (item.get("company") or {}).get("name") or ""
             desc = strip_html(item.get("contents") or "")
-            hay = f"{title} {desc}".lower()
-            if q and q not in hay and not any(
-                w in hay for w in search_terms(profile).lower().split() if len(w) > 3
-            ):
-                # Keep a portion of unfiltered results so empty queries still return jobs
+            if not listing_matches_profile_keywords(profile, title, desc):
+                # Keep a small unfiltered buffer so the source is not empty
                 if len(jobs) >= max(3, limit // 3):
                     continue
             locs = item.get("locations") or []
@@ -309,13 +324,11 @@ class WeWorkRemotelySource:
             logger.error(f"We Work Remotely failed: {exc}")
             return []
 
-        query_words = [w for w in search_terms(profile).lower().split() if len(w) > 2]
         jobs: list[JobListing] = []
         for item in items:
             title = item.get("title") or ""
             desc = strip_html(item.get("description") or "")
-            hay = f"{title} {desc}".lower()
-            if query_words and not any(w in hay for w in query_words):
+            if not listing_matches_profile_keywords(profile, title, desc):
                 continue
             company = ""
             role = title
@@ -358,15 +371,13 @@ class WorkingNomadsSource:
             logger.error(f"Working Nomads failed: {exc}")
             return []
 
-        query_words = [w for w in search_terms(profile).lower().split() if len(w) > 2]
         jobs: list[JobListing] = []
         for item in raw:
             if not isinstance(item, dict):
                 continue
             title = item.get("title") or item.get("position") or ""
             desc = strip_html(item.get("description") or item.get("excerpt") or "")
-            hay = f"{title} {desc}".lower()
-            if query_words and not any(w in hay for w in query_words):
+            if not listing_matches_profile_keywords(profile, title, desc):
                 continue
             tags = item.get("tags") or item.get("category") or []
             if isinstance(tags, str):

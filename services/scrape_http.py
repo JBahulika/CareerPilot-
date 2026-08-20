@@ -1,6 +1,7 @@
-"""Safe scrape HTTP client (Phase 2).
+"""Safe scrape HTTP client (Phase 2 + Phase 5/6).
 
 Browser-like headers, jittered delays, concurrency limits, retries with backoff.
+Optional proxies (Phase 5) and board cookies with stricter limits (Phase 6).
 Detects captcha/challenge pages and aborts that request — never solves captchas.
 """
 
@@ -19,6 +20,8 @@ import httpx
 from core.config import settings
 from core.logging import get_logger
 from services.source_health import get_source_health_registry
+from services.proxies import next_proxy_url, proxies_enabled
+from services.cookies import load_cookie_header, source_has_cookies
 
 logger = get_logger(__name__)
 
@@ -134,12 +137,24 @@ class SafeScrapeClient:
 
     def __init__(self) -> None:
         self._sema = threading.Semaphore(max(1, settings.scrape_max_concurrency))
+        cookie_conc = max(1, int(getattr(settings, "scrape_cookie_max_concurrency", 1)))
+        self._cookie_sema = threading.Semaphore(cookie_conc)
         self._lock = threading.Lock()
         self._last_request_at = 0.0
 
-    def _jitter_delay(self) -> None:
-        lo = max(0, settings.scrape_min_delay_ms)
-        hi = max(lo, settings.scrape_max_delay_ms)
+    def _uses_strict_cookies(self, source_id: str) -> bool:
+        if not source_has_cookies(source_id):
+            return False
+        return bool(getattr(settings, "scrape_cookies_strict", True))
+
+    def _jitter_delay(self, *, source_id: str | None = None) -> None:
+        use_cookie = bool(source_id and self._uses_strict_cookies(source_id))
+        if use_cookie:
+            lo = max(0, int(getattr(settings, "scrape_cookie_min_delay_ms", 1500)))
+            hi = max(lo, int(getattr(settings, "scrape_cookie_max_delay_ms", 4000)))
+        else:
+            lo = max(0, settings.scrape_min_delay_ms)
+            hi = max(lo, settings.scrape_max_delay_ms)
         delay_ms = random.randint(lo, hi) if hi > 0 else 0
         with self._lock:
             elapsed = time.monotonic() - self._last_request_at
@@ -147,6 +162,39 @@ class SafeScrapeClient:
             if elapsed < need:
                 time.sleep(need - elapsed)
             self._last_request_at = time.monotonic()
+
+    @staticmethod
+    def _429_sleep_seconds(attempt: int, retry_after: str | None = None) -> float:
+        """Stronger 429 backoff: honor Retry-After when present, else exponential."""
+        if retry_after:
+            try:
+                # Retry-After as seconds (integer) or ignore HTTP-date form
+                secs = float(retry_after.strip())
+                if secs >= 0:
+                    base = getattr(settings, "scrape_429_base_delay_ms", 2000) / 1000.0
+                    cap = getattr(settings, "scrape_429_max_delay_ms", 60000) / 1000.0
+                    return min(cap, max(secs, base)) + random.random()
+            except ValueError:
+                pass
+        base_ms = max(100, int(getattr(settings, "scrape_429_base_delay_ms", 2000)))
+        cap_ms = max(base_ms, int(getattr(settings, "scrape_429_max_delay_ms", 60000)))
+        delay = (base_ms / 1000.0) * (2**attempt) + random.uniform(0.0, 1.0)
+        return min(cap_ms / 1000.0, delay)
+
+    def _httpx_client(self, timeout: float) -> httpx.Client:
+        kwargs: dict = {"timeout": timeout, "follow_redirects": True}
+        if proxies_enabled():
+            proxy = next_proxy_url()
+            if proxy:
+                # httpx >=0.28 uses proxy=; older used proxies=
+                try:
+                    return httpx.Client(proxy=proxy, **kwargs)
+                except TypeError:
+                    return httpx.Client(
+                        proxies={"http://": proxy, "https://": proxy},
+                        **kwargs,
+                    )
+        return httpx.Client(**kwargs)
 
     def get(
         self,
@@ -163,15 +211,27 @@ class SafeScrapeClient:
         merged = browser_headers(source_id=source_id, referer=referer, accept=accept)
         if headers:
             merged.update(headers)
+        cookie_header = load_cookie_header(source_id)
+        if cookie_header and "Cookie" not in merged and "cookie" not in {
+            k.lower() for k in merged
+        }:
+            merged["Cookie"] = cookie_header
 
         max_retries = max(0, settings.scrape_max_retries)
+        rate_retries = max(max_retries, int(getattr(settings, "scrape_429_max_retries", 5)))
         last_exc: Exception | None = None
+        rate_attempts = 0
+        strict_cookies = self._uses_strict_cookies(source_id)
 
-        for attempt in range(max_retries + 1):
+        for attempt in range(max(rate_retries, max_retries) + 1):
             self._sema.acquire()
+            cookie_held = False
+            if strict_cookies:
+                self._cookie_sema.acquire()
+                cookie_held = True
             try:
-                self._jitter_delay()
-                with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+                self._jitter_delay(source_id=source_id)
+                with self._httpx_client(timeout) as client:
                     resp = client.get(url, params=params, headers=merged)
                 body = resp.text or ""
                 if looks_like_captcha(body, status_code=resp.status_code):
@@ -180,9 +240,18 @@ class SafeScrapeClient:
                     raise CaptchaBlockedError(source_id, f"challenge page from {url}")
 
                 if resp.status_code == 429:
-                    health.record(source_id, "rate_limited", f"HTTP 429 attempt={attempt}")
-                    if attempt < max_retries:
-                        time.sleep(min(8.0, 0.5 * (2**attempt) + random.random()))
+                    health.record(source_id, "rate_limited", f"HTTP 429 attempt={rate_attempts}")
+                    rate_attempts += 1
+                    if rate_attempts <= rate_retries:
+                        retry_after = resp.headers.get("Retry-After") or resp.headers.get(
+                            "retry-after"
+                        )
+                        sleep_for = self._429_sleep_seconds(rate_attempts - 1, retry_after)
+                        logger.warning(
+                            f"{source_id}: HTTP 429 — backing off {sleep_for:.1f}s "
+                            f"(attempt {rate_attempts}/{rate_retries})"
+                        )
+                        time.sleep(sleep_for)
                         continue
                     raise RateLimitedError(source_id, "HTTP 429")
 
@@ -214,6 +283,8 @@ class SafeScrapeClient:
                     continue
                 raise
             finally:
+                if cookie_held:
+                    self._cookie_sema.release()
                 self._sema.release()
 
         assert last_exc is not None

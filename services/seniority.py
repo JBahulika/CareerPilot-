@@ -59,10 +59,15 @@ _ENTRY_TITLE_PATTERNS = [
 ]
 
 _YEARS_REQUIRED_RE = re.compile(
-    r"(?:minimum|min\.?|at least|requires?)\s*(\d+)\+?\s*years?",
+    r"(?:minimum|min\.?|at least|requires?|must have)\s*(\d+)\+?\s*years?",
     re.IGNORECASE,
 )
-_YEARS_EXPERIENCE_RE = re.compile(r"(\d+)\+?\s*years?\s+(?:of\s+)?experience", re.IGNORECASE)
+_YEARS_EXPERIENCE_RE = re.compile(
+    r"(\d+)\+?\s*years?\s+(?:of\s+)?(?:relevant\s+)?experience",
+    re.IGNORECASE,
+)
+_YEARS_PLUS_RE = re.compile(r"\b(\d+)\s*\+\s*years?\b", re.IGNORECASE)
+_YEARS_RANGE_RE = re.compile(r"\b(\d+)\s*[-–]\s*(\d+)\s*years?\b", re.IGNORECASE)
 _EXPERIENCE_LEVEL_RE = re.compile(r"(\d+)\s*[-–]\s*(\d+)\s*years?", re.IGNORECASE)
 
 
@@ -277,17 +282,28 @@ def infer_candidate_tier(profile: UserProfile) -> int:
 
 
 def infer_job_required_years(job: JobListing) -> int | None:
-    """Extract minimum years of experience required from explicit job text only."""
-    haystack = f"{job.title} {job.description}"
-    max_years = 0
-    found = False
-    for pattern in (_YEARS_REQUIRED_RE, _YEARS_EXPERIENCE_RE):
+    """Extract minimum years of experience required from explicit job text.
+
+    Recognizes forms like ``5+ years``, ``3-5 years``, ``minimum 4 years``,
+    and ``2 years of experience``. Prefers ``job.required_years_min`` when set.
+    """
+    if job.required_years_min is not None:
+        return int(job.required_years_min)
+
+    haystack = f"{job.title} {job.description} {job.requirements}"
+    mins: list[int] = []
+
+    for pattern in (_YEARS_REQUIRED_RE, _YEARS_EXPERIENCE_RE, _YEARS_PLUS_RE):
         for match in pattern.finditer(haystack):
-            max_years = max(max_years, int(match.group(1)))
-            found = True
-    if found:
-        return max_years
-    return None
+            mins.append(int(match.group(1)))
+
+    for match in _YEARS_RANGE_RE.finditer(haystack):
+        # "3-5 years" → require at least the lower bound
+        mins.append(int(match.group(1)))
+
+    if not mins:
+        return None
+    return max(mins)
 
 
 def is_years_compatible(
@@ -302,11 +318,12 @@ def is_years_compatible(
     if job_years is None:
         return True
 
-    flex = flex_years + (1 if allow_stretch else 0)
+    flex = max(0, int(flex_years)) + (1 if allow_stretch else 0)
     min_y, max_y = effective_target_years(profile)
     min_allowed = max(0, min_y - flex)
     max_allowed = max_y + flex
-    return min_allowed <= job_years <= max_allowed
+    # Job minimum required years must fit within the candidate's allowed band.
+    return job_years <= max_allowed and job_years >= min_allowed
 
 
 def infer_job_tier_from_text(title: str, description: str = "") -> int:
@@ -315,9 +332,17 @@ def infer_job_tier_from_text(title: str, description: str = "") -> int:
     lowered = haystack.lower()
 
     max_required_years = 0
-    for pattern in (_YEARS_REQUIRED_RE, _YEARS_EXPERIENCE_RE):
+    found_years = False
+    for pattern in (_YEARS_REQUIRED_RE, _YEARS_EXPERIENCE_RE, _YEARS_PLUS_RE):
         for match in pattern.finditer(haystack):
             max_required_years = max(max_required_years, int(match.group(1)))
+            found_years = True
+    for match in _YEARS_RANGE_RE.finditer(haystack):
+        # Use upper bound of range for tier (3-5 yrs ≈ mid)
+        max_required_years = max(max_required_years, int(match.group(2)))
+        found_years = True
+    if not found_years:
+        max_required_years = 0
 
     if max_required_years >= 10:
         tier_from_years = 4

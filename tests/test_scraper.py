@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from agents.job_sources.api_sources import RemotiveSource
 from agents.job_sources.common import content_hash as _content_hash
 from agents.job_sources.common import strip_html as _strip_html
@@ -25,6 +27,7 @@ def test_strip_html_removes_tags():
 
 
 def test_remotive_parses_fixture(monkeypatch):
+    recent = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d")
     fixture = {
         "jobs": [
             {
@@ -35,6 +38,7 @@ def test_remotive_parses_fixture(monkeypatch):
                 "candidate_required_location": "Remote",
                 "salary": "$100k",
                 "url": "https://example.com/job/1",
+                "publication_date": recent,
             }
         ]
     }

@@ -53,6 +53,70 @@ def test_aiml_job_relevant_for_aiml_profile():
     assert not has_unrelated_enterprise_stack(job, profile)
 
 
+def test_aiml_profile_matches_data_analyst_via_skills():
+    profile = _aiml_profile()
+    profile.skills = list(profile.skills) + ["SQL", "Pandas"]
+    job = _job(
+        "Junior Data Analyst",
+        "Python SQL pandas dashboards and basic machine learning",
+        skills=["Python", "SQL"],
+    )
+    assert role_relevant(job, profile)
+
+
+def test_skill_first_queries_prefer_resume_skills():
+    from services.skills import listing_matches_profile_keywords, skill_search_terms
+
+    profile = _aiml_profile()
+    profile.skills = ["Python", "SQL", "Pandas", "PyTorch", "FastAPI", "Docker"]
+    terms = skill_search_terms(profile, limit=8)
+    assert any(t.lower() == "python" for t in terms)
+    assert any(t.lower() == "sql" for t in terms)
+    assert listing_matches_profile_keywords(
+        profile,
+        "Data Analyst",
+        "Python SQL pandas visualization",
+    )
+
+
+def test_focus_field_aiml_excludes_unrelated_titles():
+    from services.job_fields import effective_fields
+    from services.skills import listing_matches_profile_keywords, role_relevant
+
+    profile = _aiml_profile()
+    profile.focus_field = "aiml"
+    profile.skills = list(profile.skills) + ["SQL", "Pandas"]
+
+    assert effective_fields(profile) == ["aiml"]
+    assert role_relevant(
+        _job("Junior ML Engineer", "python pytorch machine learning"),
+        profile,
+    )
+    assert not role_relevant(
+        _job("Frontend Engineer", "react typescript ui development"),
+        profile,
+    )
+    assert listing_matches_profile_keywords(
+        profile,
+        "ML Engineer",
+        "pytorch tensorflow",
+    )
+    assert not listing_matches_profile_keywords(
+        profile,
+        "Frontend Engineer",
+        "react typescript css",
+    )
+
+
+def test_focus_field_data_science_narrows_search_queries():
+    from agents.job_sources.common import search_queries
+
+    profile = _aiml_profile()
+    profile.focus_field = "data_science"
+    joined = " ".join(search_queries(profile)).lower()
+    assert "data scientist" in joined or "applied scientist" in joined
+
+
 def test_filter_matched_skills_rejects_hallucinated_abap():
     profile = _aiml_profile()
     claimed = ["Python", "ABAP", "PyTorch"]

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from agents.job_sources.budget import allocate_scrape_budgets
+from agents.job_sources.common import early_relevance_score, job_identity_key
+from agents.job_sources.registry import resolve_enabled_sources
 from core.logging import get_logger
 from models.schemas import JobListing, UserProfile
-from agents.job_sources.registry import resolve_enabled_sources
 
 logger = get_logger(__name__)
 
@@ -31,9 +33,10 @@ class AggregateSource:
             allowed = resolve_enabled_sources(None)
             active = [s for s in self._sources if s.name in allowed]
 
-        per_source = max(10, limit // max(len(active), 1))
+        budgets = allocate_scrape_budgets([s.name for s in active], limit)
         all_jobs: list[JobListing] = []
-        seen: set[str] = set()
+        seen_hash: set[str] = set()
+        seen_identity: set[str] = set()
         report: list[dict] = []
 
         enabled_names = {s.name for s in active}
@@ -51,14 +54,17 @@ class AggregateSource:
                 )
 
         for source in active:
+            per_source = budgets.get(source.name, max(8, limit // max(len(active), 1)))
             entry: dict = {
                 "id": source.name,
                 "status": "ok",
                 "requested": per_source,
                 "returned": 0,
-                "detail": "",
+                "kept": 0,
+                "detail": f"even budget={per_source}",
                 "sample_titles": [],
             }
+            kept = 0
             try:
                 batch = source.fetch(
                     profile,
@@ -72,23 +78,36 @@ class AggregateSource:
                     entry["status"] = "empty"
                     entry["detail"] = "0 jobs after source fetch/filters"
                 for job in batch:
-                    if job.content_hash in seen:
+                    if job.content_hash in seen_hash:
                         continue
-                    seen.add(job.content_hash)
+                    ident = job_identity_key(job)
+                    if ident in seen_identity:
+                        continue
+                    seen_hash.add(job.content_hash)
+                    seen_identity.add(ident)
                     all_jobs.append(job)
-                logger.info(f"Aggregate: {source.name} contributed {len(batch)} jobs")
+                    kept += 1
+                entry["kept"] = kept
+                logger.info(
+                    f"Aggregate: {source.name} requested={per_source} "
+                    f"returned={len(batch)} kept={kept}"
+                )
             except Exception as exc:  # noqa: BLE001
                 entry["status"] = "error"
                 entry["detail"] = str(exc)[:300]
                 logger.error(f"Aggregate: {source.name} failed: {exc}")
             report.append(entry)
 
-        # Keep report ordered: active sources first (as fetched), then skipped
         active_ids = {s.name for s in active}
-        report.sort(
-            key=lambda r: (0 if r["id"] in active_ids else 1, r["id"])
-        )
+        report.sort(key=lambda r: (0 if r["id"] in active_ids else 1, r["id"]))
         self.last_fetch_report = report
 
-        all_jobs.sort(key=lambda j: j.posted_at or j.scraped_at, reverse=True)
+        # Prefer recent + early skill/role relevance when truncating to limit
+        all_jobs.sort(
+            key=lambda j: (
+                early_relevance_score(j, profile),
+                j.posted_at or j.scraped_at,
+            ),
+            reverse=True,
+        )
         return all_jobs[:limit]

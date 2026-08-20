@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+from core.config import settings
 from models.schemas import JobListing, UserProfile
 from services.location import effective_location, is_remote_location, locations_match
 from services.seniority import (
@@ -25,7 +26,7 @@ from services.seniority import (
 )
 from services.skills import (
     deterministic_skill_overlap,
-    is_excluded_job_title,
+    is_sales_or_gtm_role,
     role_search_terms,
 )
 from services.job_fields import effective_fields, title_relevance_for_fields
@@ -76,11 +77,21 @@ def _seniority_proximity(job: JobListing, profile: UserProfile) -> float:
 
 
 def _recency(job: JobListing) -> float:
-    """1.0 for fresh (<=2 days), decaying to 0 by ~30 days."""
-    posted = job.posted_at or job.scraped_at
+    """1.0 for fresh (<=2 days), decaying to 0 by ~30 days.
+
+    Phase 10a: never treat scrape time as evidence of still-hiring. Missing
+    ``posted_at`` scores low (fail closed) when still-hiring mode is on.
+    """
+    posted = job.posted_at
     if posted is None:
-        return 0.3
-    age = datetime.utcnow() - posted
+        if bool(getattr(settings, "still_hiring_enabled", True)):
+            return 0.0
+        posted = job.scraped_at
+        if posted is None:
+            return 0.3
+    age = datetime.utcnow() - (
+        posted.replace(tzinfo=None) if posted.tzinfo else posted
+    )
     if age <= timedelta(days=2):
         return 1.0
     if age >= timedelta(days=30):
@@ -91,7 +102,7 @@ def _recency(job: JobListing) -> float:
 def _location_fit(job: JobListing, profile: UserProfile) -> float:
     pref = effective_location(profile)
     location = job.location or ""
-    if job.remote or is_remote_location(location):
+    if is_remote_location(location):
         return 1.0 if profile.include_remote else 0.2
     if not pref:
         return 0.6
@@ -102,7 +113,7 @@ def _location_fit(job: JobListing, profile: UserProfile) -> float:
 
 def relevance_score(job: JobListing, profile: UserProfile) -> int:
     """Composite 0-100 fit score for a scraped job against the profile."""
-    if is_excluded_job_title(job.title):
+    if is_sales_or_gtm_role(job):
         return 0
 
     title = _title_relevance(job, profile)

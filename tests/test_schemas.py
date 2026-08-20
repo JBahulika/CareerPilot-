@@ -24,6 +24,22 @@ def test_user_profile_validates_partial_data():
     assert "Python" in profile.summary_text()
 
 
+def test_certifications_coerce_dict_objects():
+    profile = UserProfile.model_validate(
+        {
+            "name": "Saahil",
+            "certifications": [
+                {"name": "Introduction to ML", "provider": "NPTEL"},
+                {"name": "Programming for Everybody", "provider": "University of Michigan"},
+                "AWS Cloud Practitioner",
+            ],
+        }
+    )
+    assert profile.certifications[0] == "Introduction to ML (NPTEL)"
+    assert "University of Michigan" in profile.certifications[1]
+    assert profile.certifications[2] == "AWS Cloud Practitioner"
+
+
 def test_job_match_text_includes_key_fields():
     job = JobListing(company="Acme", title="AI Engineer", skills=["Python"])
     text = job.match_text()

@@ -12,7 +12,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 _JOB_BOILERPLATE_RE = re.compile(
     r"(equal opportunity|eeo|affirmative action|background check|"
@@ -69,6 +69,45 @@ class UserProfile(BaseModel):
     experience: list[Experience] = Field(default_factory=list)
     certifications: list[str] = Field(default_factory=list)
     preferred_roles: list[str] = Field(default_factory=list)
+
+    @field_validator("certifications", mode="before")
+    @classmethod
+    def _coerce_certifications(cls, value: object) -> list[str]:
+        """LLMs often return ``{name, provider}`` objects — flatten to strings."""
+        if value is None:
+            return []
+        if isinstance(value, str):
+            text = value.strip()
+            return [text] if text else []
+        if not isinstance(value, list):
+            return []
+        out: list[str] = []
+        for item in value:
+            if isinstance(item, str):
+                text = item.strip()
+                if text:
+                    out.append(text)
+                continue
+            if isinstance(item, dict):
+                name = str(item.get("name") or item.get("title") or "").strip()
+                provider = str(
+                    item.get("provider")
+                    or item.get("issuer")
+                    or item.get("organization")
+                    or ""
+                ).strip()
+                if name and provider:
+                    out.append(f"{name} ({provider})")
+                elif name:
+                    out.append(name)
+                elif provider:
+                    out.append(provider)
+                continue
+            text = str(item).strip()
+            if text:
+                out.append(text)
+        return out
+
     preferred_location: str = ""
     include_remote: bool = True
     target_years_min: Optional[int] = None
@@ -79,8 +118,29 @@ class UserProfile(BaseModel):
     flex_years: Optional[int] = None
     exclude_internships: bool = False
     min_match_score: int = 60  # 0–100; only notify/tailor matches at or above
+    # Optional career-field focus for scrape/filter ("" = any / skill-first)
+    # See services.job_fields.JOB_FIELDS / services.skills.focus_field_options()
+    focus_field: str = ""
+    # Legacy multi-select; focus_field takes priority when both are set
+    preferred_fields: list[str] = Field(default_factory=list)
     # Empty = use registry enabled_by_default (safe APIs). Explicit list = allowlist.
     enabled_sources: list[str] = Field(default_factory=list)
+    # Notifications (Profile UI overrides .env when set)
+    notifier_backend: str = ""  # local | whatsapp | email | both | ""=env
+    notify_whatsapp: str = ""  # E.164 e.g. +91XXXXXXXXXX
+    notify_email: str = ""
+    whatsapp_token: str = ""
+    whatsapp_phone_id: str = ""
+    smtp_host: str = ""
+    smtp_port: Optional[int] = None
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    # Google Drive backup (service-account JSON stored under data/secrets/)
+    google_drive_enabled: bool = False
+    google_drive_folder_id: str = ""
+    # When True, manual Run Pipeline also sends a WA/email/local digest
+    notify_on_manual_run: bool = False
 
     def all_skills(self) -> list[str]:
         """Technical skills plus legacy flat skills list (deduplicated)."""

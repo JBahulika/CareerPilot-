@@ -73,3 +73,21 @@ class PipelineRunRow(SQLModel, table=True):
     summary_json: dict = Field(default_factory=dict, sa_column=Column(SA_JSON))
     started_at: datetime = Field(default_factory=datetime.utcnow)
     finished_at: Optional[datetime] = None
+
+
+class NotifiedJobRow(SQLModel, table=True):
+    """Jobs already included in a digest (Phase 8 — avoid re-notify noise)."""
+
+    __tablename__ = "notified_jobs"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    profile_id: Optional[int] = Field(default=None, index=True)
+    content_hash: str = Field(default="", index=True)
+    apply_url: str = Field(default="", index=True)
+    company: str = ""
+    title: str = ""
+    match_score: int = 0
+    posted_at: Optional[datetime] = Field(default=None)
+    listing_fingerprint: str = ""  # short hash of description / listing text
+    last_run_id: Optional[int] = Field(default=None, index=True)
+    notified_at: datetime = Field(default_factory=datetime.utcnow)

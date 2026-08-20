@@ -19,6 +19,7 @@
 #
 #   Terminal 1:  uvicorn main:app --reload
 #   Terminal 2:  streamlit run ui/streamlit_app.py
+#   Or Windows:  start_careerpilot.bat  (or CareerPilot.exe in the project folder)
 #
 # ── macOS / Linux setup ────────────────────────────────────────────────────
 #   python3 -m venv .venv
@@ -62,6 +63,10 @@ requests>=2.31.0
 # --- Scheduler & logging ---
 apscheduler>=3.10.0
 loguru>=0.7.0
+
+# --- Optional Google Drive backup ---
+google-api-python-client>=2.100.0
+google-auth>=2.20.0
 
 # --- Tests ---
 pytest>=8.0.0

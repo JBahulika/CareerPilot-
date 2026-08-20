@@ -1,0 +1,6 @@
+# Example proxy list for CareerPilot Phase 5 (copy to data/proxies/list.txt).
+# One HTTP(S) proxy URL per line. Lines starting with # are ignored.
+# Do not commit real credentials — data/proxies/ is gitignored.
+#
+# http://127.0.0.1:8080
+# http://user:pass@proxy.example:8080

@@ -30,7 +30,17 @@ async def upload_resume(file: UploadFile = File(...)) -> dict:
     try:
         profile = _parser.run(dest)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Resume parse failed")
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Resume parsing failed: {exc}. "
+                "Check that Ollama is running and the selected model is pulled "
+                "(e.g. ollama pull qwen2.5:7b)."
+            ),
+        ) from exc
 
     profile_id = save_profile(profile, file.filename)
     return {"profile_id": profile_id, "profile": profile.model_dump()}
@@ -49,4 +59,29 @@ def latest_profile() -> dict:
 def update_profile(profile_id: int, profile: UserProfile) -> dict:
     """Persist user edits to a parsed profile."""
     new_id = save_profile(profile, resume_filename="")
+    try:
+        from services.google_drive import maybe_backup_profile
+
+        maybe_backup_profile(profile)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"Drive profile backup skipped: {exc}")
     return {"profile_id": new_id, "profile": profile.model_dump()}
+
+
+@router.post("/drive/credentials")
+async def upload_drive_credentials(file: UploadFile = File(...)) -> dict:
+    """Save a Google service-account JSON for Drive backups."""
+    from services.google_drive import drive_credentials_status, save_service_account_json
+
+    raw = await file.read()
+    try:
+        path = save_service_account_json(raw)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    status = drive_credentials_status()
+    return {
+        "ok": True,
+        "path": str(path),
+        "client_email": status.get("client_email", ""),
+        "hint": "Share your Drive folder with this service-account email (Editor).",
+    }

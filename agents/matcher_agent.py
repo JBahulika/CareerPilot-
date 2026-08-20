@@ -92,6 +92,9 @@ def _combine_score(
 
 
 class SemanticMatcherAgent:
+    def __init__(self) -> None:
+        self.last_match_stats: dict = {}
+
     def run(
         self,
         profile: UserProfile,
@@ -104,6 +107,12 @@ class SemanticMatcherAgent:
         min_match_score: int | None = None,
     ) -> list[MatchResult]:
         if not jobs:
+            self.last_match_stats = {
+                "scored": 0,
+                "viewable": 0,
+                "above_threshold": 0,
+                "threshold": effective_min_match_score(profile, min_match_score),
+            }
             return []
 
         candidate_tier = infer_candidate_tier(profile)
@@ -125,6 +134,12 @@ class SemanticMatcherAgent:
             )
 
         if not eligible:
+            self.last_match_stats = {
+                "scored": 0,
+                "viewable": 0,
+                "above_threshold": 0,
+                "threshold": effective_min_match_score(profile, min_match_score),
+            }
             return []
 
         index_jobs(eligible)
@@ -169,7 +184,8 @@ class SemanticMatcherAgent:
         }
 
         results: list[MatchResult] = []
-        score_pool = reranked[: max(top_n * 2, top_n)]
+        # Score a broad pool so Results can show low matches (1%+) if requested
+        score_pool = reranked[: max(settings.matcher_rerank_top_n, top_n * 3, 30)]
 
         for job in score_pool:
             embed_score = recall_scores.get(job.content_hash, 0.0) * 100
@@ -199,12 +215,24 @@ class SemanticMatcherAgent:
             reverse=True,
         )
         threshold = effective_min_match_score(profile, min_match_score)
-        kept, dropped = filter_match_results(results, threshold)
+        # Persist everything with any positive signal (≥1%); digests/UI threshold
+        # still gate "strong" matches. Cap volume for DB size.
+        viewable = [m for m in results if m.match_score >= 1][: max(top_n * 10, 80)]
+        strong, dropped = filter_match_results(viewable, threshold)
         if dropped:
             logger.info(
-                f"Matcher: dropped {dropped} job(s) below min_match_score={threshold}"
+                f"Matcher: {len(strong)} at/above min_match_score={threshold}; "
+                f"{dropped} low-match kept for optional Results view"
             )
-        return kept[:top_n]
+        # Prefer strong matches first, then low; caller may filter by threshold
+        ordered = strong + [m for m in viewable if m.match_score < threshold]
+        self.last_match_stats = {
+            "scored": len(results),
+            "viewable": len(viewable),
+            "above_threshold": len(strong),
+            "threshold": threshold,
+        }
+        return ordered
 
     def _score_job(
         self,

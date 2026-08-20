@@ -83,16 +83,61 @@ JOB_FIELDS: dict[str, JobFieldDef] = {
     "data_science": JobFieldDef(
         id="data_science",
         label="Data Science",
-        search_terms=("data scientist", "analytics engineer", "data analyst"),
+        search_terms=("data scientist", "applied scientist", "research scientist"),
         keywords=(
             "data scientist",
             "data science",
-            "analytics",
+            "applied scientist",
+            "research scientist",
             "statistics",
+            "machine learning",
+            "scikit-learn",
+        ),
+        infer_signals=("data scientist", "data science", "applied scientist"),
+    ),
+    "data_analytics": JobFieldDef(
+        id="data_analytics",
+        label="Data Analytics / BI",
+        search_terms=(
+            "data analyst",
+            "business intelligence analyst",
+            "analytics engineer",
+            "bi developer",
+        ),
+        keywords=(
             "data analyst",
             "business intelligence",
+            "analytics engineer",
+            "bi analyst",
+            "tableau",
+            "power bi",
+            "looker",
+            "sql",
         ),
-        infer_signals=("data scientist", "data science", "analytics", "statistics"),
+        infer_signals=(
+            "data analyst",
+            "business intelligence",
+            "tableau",
+            "power bi",
+            "analytics",
+        ),
+    ),
+    "data_engineering": JobFieldDef(
+        id="data_engineering",
+        label="Data Engineering",
+        search_terms=("data engineer", "analytics engineer", "etl developer"),
+        keywords=(
+            "data engineer",
+            "etl",
+            "spark",
+            "airflow",
+            "kafka",
+            "snowflake",
+            "databricks",
+            "dbt",
+            "pipeline",
+        ),
+        infer_signals=("data engineer", "etl", "spark", "airflow", "kafka", "dbt"),
     ),
     "backend": JobFieldDef(
         id="backend",
@@ -261,8 +306,21 @@ def infer_fields_from_profile(profile: UserProfile) -> list[str]:
 
 
 def effective_fields(profile: UserProfile) -> list[str]:
-    """User-selected fields, or inferred when unset."""
-    selected = [f for f in profile.preferred_fields if f in JOB_FIELDS]
+    """Optional focus/preferred fields, or inferred when unset.
+
+    Priority:
+    1. ``focus_field`` (single Profile dropdown) when set
+    2. ``preferred_fields`` multi-select when set
+    3. Infer from resume content
+    """
+    from services.skills import normalize_focus_field
+
+    focus = normalize_focus_field(getattr(profile, "focus_field", "") or "")
+    if focus and focus in JOB_FIELDS:
+        return [focus]
+
+    preferred = getattr(profile, "preferred_fields", None) or []
+    selected = [f for f in preferred if f in JOB_FIELDS]
     if selected:
         return selected
     return infer_fields_from_profile(profile)

@@ -21,8 +21,318 @@ Do not ship feature work without a changelog line.
 
 ### Planned (phased roadmap)
 
-- Phase 4+: WhatsApp/email digests, proxies, optional cookies, dedupe,
-  skills-gap / cover-letter — see `docs/UPGRADE_NOTES.md`.
+- Phase 7: model pins — see `docs/UPGRADE_NOTES.md`.
+
+## [0.8.0] — 2026-08-20
+
+### Added (Phase 10b)
+
+- **One-click launcher**: `setup_careerpilot.bat` (first time: `.venv` + deps) and
+  `start_careerpilot.bat` (everyday: model picker + start, no reinstall).
+  Optional `CareerPilot.exe` via `build_careerpilot_exe.bat`.
+- Hardware-aware soft warnings before heavy models (“Are you sure?”).
+  Pass `--auto` / `--yes` only for non-interactive / CI runs.
+- Persists `OLLAMA_MODEL` into `.env`. Opens Python/Ollama download pages when missing.
+- Resume parse errors surface in the UI (timeouts / Ollama down) instead of a blank crash.
+
+### Guardrails
+
+- Never auto-applies; never solves captchas.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged; uses stdlib + existing `httpx`).
+
+## [0.7.0] — 2026-08-20
+
+### Added (Phase 10a)
+
+- **Still-hiring heuristic**: label and prefer listings with a real `posted_at`
+  inside `STILL_HIRING_DAYS` (default 7). Statuses: `likely` / `stale` / `unknown`.
+- **Fail closed**: missing dates are never marked “still hiring”; scrape time is
+  not used as a post date for this signal. Results show the label; digests and
+  scrape sort can prefer likely jobs (`STILL_HIRING_PREFER`).
+- Knobs: `STILL_HIRING_ENABLED`, `STILL_HIRING_DAYS`, `STILL_HIRING_PREFER`.
+
+### Guardrails
+
+- No auto-apply; no captcha bypass. Does not query employer ATS for live status.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.6.0] — 2026-08-20
+
+### Added (Phase 9)
+
+- **Skills gap + cover letter (user-selected only)**: on Results, pick a job then
+  optionally open skills gap or draft a cover letter via Ollama.
+- API: `GET /jobs/matches/{run_id}/{match_id}/skills-gap`,
+  `POST /jobs/matches/{run_id}/{match_id}/cover-letter`.
+- Drafts are never auto-sent; CareerPilot never auto-applies.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.5.0] — 2026-08-20
+
+### Added (Phase 8)
+
+- **Dedupe already-notified jobs**: digests persist sent listings in local DB
+  (`notified_jobs`). The same job is not re-notified across runs unless the
+  listing clearly refreshed (newer `posted_at` / fingerprint) or the match score
+  jumps by `NOTIFY_RESEND_SCORE_DELTA` (default 10).
+- Knobs: `NOTIFY_DEDUPE_ENABLED`, `NOTIFY_RESEND_SCORE_DELTA`.
+
+### Guardrails
+
+- Still never auto-applies.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.4.1] — 2026-08-20
+
+### Added
+
+- **In-app setup guides**: Setup and Profile pages have a **How to connect**
+  panel (tabs for WhatsApp, Email, Google Drive, board cookies) with step-by-step
+  instructions pointing at Profile fields / `.env` / `docs/LEGAL.md`.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.4.0] — 2026-08-20
+
+### Added (Phase 6)
+
+- **Optional board cookies** (`SCRAPE_COOKIES_*`): load per-board session cookies
+  from gitignored `data/cookies/{source}.txt|.json` for HTTP + Playwright scrapers.
+- **Stricter rate limits when cookies are used** (default): higher delays and
+  concurrency 1 (`SCRAPE_COOKIES_STRICT`, `SCRAPE_COOKIE_*`).
+- Setup / `/scheduler/status` shows which boards have cookie files (values never
+  exposed). Example docs: `docs/examples/cookies.example.md`.
+
+### Guardrails
+
+- Still never solves captchas; still never auto-applies.
+- Cookie risks documented in `docs/LEGAL.md` and README. Never commit cookie files.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.3.0] — 2026-08-20
+
+### Added (Phase 5)
+
+- **Optional HTTP(S) proxies** for scrapers (`SCRAPE_PROXY_*`): single URL or
+  `data/proxies/list.txt`, optional rotate; credentials never logged; Setup shows
+  redacted status via `/scheduler/status`.
+- **Random daily scan window** (`DAILY_SCAN_WINDOW_*`): when enabled, arms one
+  scan at a random time between window start/end instead of a fixed clock time.
+- **Quiet hours** (`QUIET_HOURS_*`): skip the daily scan when local time falls in
+  the range (overnight wrap supported).
+- **Stronger 429 backoff** (`SCRAPE_429_*`): honor `Retry-After`, exponential
+  backoff with higher caps/retries.
+
+### Guardrails
+
+- Still never solves captchas; still never auto-applies.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.2.23] — 2026-08-12
+
+### Fixed
+
+- Resume parse no longer fails when the LLM returns certifications as
+  `{name, provider}` objects — they are coerced to strings.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.2.22] — 2026-08-12
+
+### Added
+
+- **Manual-run digests**: Profile toggle “Also notify on manual Run Pipeline” plus
+  a per-run override on Run Pipeline. Sends the same WhatsApp/email/local digest
+  as the morning scan when enabled (threshold + location gated).
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.2.21] — 2026-08-12
+
+### Added
+
+- **Profile notifications UI**: digest backend, WhatsApp number + Cloud API fields,
+  digest email + SMTP fields (override `.env` when set).
+- **Optional Google Drive backup**: upload service-account JSON, set folder ID;
+  digests / profile snapshots / run summaries upload in the background without
+  blocking the pipeline.
+
+### Dependencies
+
+- Added `google-api-python-client`, `google-auth` (Drive backup).
+
+## [0.2.20] — 2026-08-07
+
+### Fixed
+
+- Scrapes that fail location/role/experience filters are still saved as **browse
+  low-matches** (score ≥1%, below digest threshold) so Results is not empty when
+  boards return a handful of jobs.
+- Results pagination no longer sticks on “Page 2 of 1” with 0 jobs; clearer empty
+  state showing scrape/filter counts.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.2.19] — 2026-08-07
+
+### Changed
+
+- **Even scrape budgets**: every board gets the same `requested` share of
+  `scrape_limit` (no longer API-weighted 3× vs Playwright).
+- Board search blends **skills + roles** (and skill+role combos), not skills alone.
+- Run Pipeline default scrape cap raised to **400**.
+
+### Added
+
+- Results toggle **Show low matches too (score ≥ 1%)** — scrapes scored ≥1% are
+  persisted; digests still use your min match threshold.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.2.18] — 2026-08-07
+
+### Added
+
+- **Optional focus-field dropdown** on Profile (and Run Pipeline override): choose
+  AI/ML, Data Science, Data Analytics, Data Engineering, Backend, etc. When set,
+  scrape queries and relevance keep listings in that field. Leave as **Any** for
+  skill-first matching across adjacent roles.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.2.17] — 2026-08-07
+
+### Changed
+
+- **Skill-first discovery**: board search queries are driven by resume skills
+  (individual skills + skill blend); preferred role is only a secondary query.
+- Dump/API keep-rules and `role_relevant` prioritize skill overlap over AIML
+  title matching — Data Analyst / similar roles surface when skills match.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.2.16] — 2026-08-07
+
+### Changed
+
+- Broader scrape queries for AIML profiles: adjacent roles (Data Analyst /
+  Scientist / Engineer, NLP, Python Developer, …) plus a skill-blend query.
+- Dump/API boards match on **skills or adjacent roles**, not only AI/ML title
+  tokens — fixes empty Remotive/RemoteOK/WWR vs LinkedIn+Arbeitnow dominance.
+- `role_relevant` accepts adjacent titles and skill overlap (≥1).
+- Jobicy uses skill tags (e.g. python) instead of truncated `AI`.
+- Playwright boards run up to 3 focused queries.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.2.15] — 2026-08-07
+
+### Fixed
+
+- Recency: parse relative dates (`5 months ago`, `2 weeks ago`); do **not** invent
+  `posted_at=now` for undated listings; drop unknown/stale dates when a day
+  window is set (fail closed). Filter stage re-applies the run’s `recent_days`.
+- Experience: parse `5+ years`, `3-5 years`, and similar phrases; entry profiles
+  with flex ±1 no longer keep jobs that require far more years.
+- Job upsert refreshes metadata and keeps the earliest known post date.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.2.14] — 2026-08-07
+
+### Changed
+
+- Resume PDF tailoring **paused** by default (`TAILOR_RESUMES_ENABLED=false`).
+  Pipeline still scrapes → filters → matches; tailor/PDF step is a no-op.
+- Results UI no longer shows “Download tailored resume”; Run Pipeline copy
+  updated (“Top N matches to keep”).
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.2.13] — 2026-08-07
+
+### Added
+
+- Weighted Aggregate scrape budgets: API/RSS boards get a larger share of
+  `scrape_limit` than Playwright boards (`agents/job_sources/budget.py`).
+- Focused multi-query search (`search_queries`): 2–3 short role queries instead
+  of one mega keyword bag; juniors get a separate “junior …” query.
+- Cross-source identity dedupe (apply URL or company+title) in Aggregate.
+- Early skill/role relevance sort before truncating to the scrape cap.
+- Remotive + Playwright boards fan out across focused queries (Playwright max 2).
+- Tests: `tests/test_scrape_budget.py`; updated `tests/test_scraper_search.py`.
+
+### Changed
+
+- Run Pipeline caption explains weighted budgets (not flat limit÷boards).
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.2.12] — 2026-08-07
+
+### Added
+
+- Human-in-the-loop digests with **cap** (`MAX_DIGEST_JOBS`, default 5): sort by
+  match score desc, then truncate.
+- Digest lines: title, company, location, score, short reason, apply link —
+  only ≥ min match score and location-eligible (`services/digest.py`).
+- Email notifier via SMTP (`SMTP_*`, `EMAIL_TO`).
+- `NOTIFIER_BACKEND`: `local` | `whatsapp` | `email` | `both`.
+- Local digest file under `logs/notifications/` always written when notifying
+  (audit / fallback).
+- Setup UI shows digest cap + WhatsApp/email config status; README clarifies
+  discover + notify only (no auto-apply).
+- Tests: `tests/test_digest.py`, `tests/test_email_notifier.py`, expanded
+  notifier/WhatsApp formatter tests (mocked — no real sends).
+
+### Changed
+
+- Daily scheduler relies on notifier prep/cap instead of a separate pre-filter.
+- Digest footer states CareerPilot never auto-applies.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged; SMTP via stdlib).
 
 ## [0.2.11] — 2026-08-05
 

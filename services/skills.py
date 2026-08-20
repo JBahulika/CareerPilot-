@@ -120,6 +120,457 @@ def role_search_terms(profile: UserProfile) -> list[str]:
     return roles
 
 
+# Optional Profile/Run dropdown: narrow discovery to a career field.
+# id "" / "any" = skill-first across all tech roles.
+# Base labels/search come from services.job_fields; overlays add role/skill hints.
+_FOCUS_OVERLAYS: dict[str, dict[str, object]] = {
+    "aiml": {
+        "roles": (
+            "AI Engineer",
+            "ML Engineer",
+            "Machine Learning Engineer",
+            "NLP Engineer",
+            "Computer Vision Engineer",
+            "MLOps Engineer",
+            "Applied Scientist",
+            "Research Scientist",
+        ),
+        "skill_hints": (
+            "pytorch",
+            "tensorflow",
+            "machine learning",
+            "deep learning",
+            "langchain",
+            "llm",
+            "nlp",
+            "opencv",
+            "transformers",
+            "scikit-learn",
+            "rag",
+        ),
+        "title_hints": (
+            "ai engineer",
+            "ml engineer",
+            "machine learning",
+            "deep learning",
+            "nlp",
+            "computer vision",
+            "mlops",
+            "llm",
+            "applied scientist",
+            "research scientist",
+        ),
+    },
+    "data_science": {
+        "roles": (
+            "Data Scientist",
+            "Applied Scientist",
+            "Research Scientist",
+            "ML Engineer",
+        ),
+        "skill_hints": (
+            "python",
+            "pandas",
+            "numpy",
+            "scikit-learn",
+            "statistics",
+            "machine learning",
+            "sql",
+            "pytorch",
+            "tensorflow",
+        ),
+        "title_hints": (
+            "data scientist",
+            "applied scientist",
+            "research scientist",
+            "machine learning",
+        ),
+    },
+    "data_analytics": {
+        "roles": (
+            "Data Analyst",
+            "Business Intelligence Analyst",
+            "Analytics Engineer",
+            "BI Developer",
+        ),
+        "skill_hints": (
+            "sql",
+            "tableau",
+            "power bi",
+            "excel",
+            "pandas",
+            "looker",
+            "dbt",
+            "analytics",
+        ),
+        "title_hints": (
+            "data analyst",
+            "business intelligence",
+            "analytics engineer",
+            "bi analyst",
+            "bi developer",
+        ),
+    },
+    "data_engineering": {
+        "roles": (
+            "Data Engineer",
+            "Analytics Engineer",
+            "ETL Developer",
+        ),
+        "skill_hints": (
+            "spark",
+            "airflow",
+            "kafka",
+            "sql",
+            "etl",
+            "snowflake",
+            "databricks",
+            "dbt",
+            "python",
+        ),
+        "title_hints": (
+            "data engineer",
+            "analytics engineer",
+            "etl",
+            "pipeline",
+        ),
+    },
+    "software": {
+        "roles": (
+            "Software Engineer",
+            "Backend Engineer",
+            "Full Stack Developer",
+            "Python Developer",
+            "API Developer",
+        ),
+        "skill_hints": (
+            "python",
+            "fastapi",
+            "django",
+            "javascript",
+            "typescript",
+            "react",
+            "java",
+            "docker",
+            "aws",
+        ),
+        "title_hints": (
+            "software engineer",
+            "backend",
+            "full stack",
+            "fullstack",
+            "python developer",
+            "web developer",
+        ),
+    },
+    "backend": {
+        "roles": ("Backend Engineer", "Python Developer", "API Developer"),
+        "skill_hints": ("python", "fastapi", "django", "flask", "java", "node"),
+        "title_hints": ("backend", "back-end", "api developer", "python developer"),
+    },
+}
+
+
+def focus_field_options() -> list[dict[str, str]]:
+    """UI-friendly id/label pairs for the focus-field dropdown."""
+    from services.job_fields import JOB_FIELD_OPTIONS
+
+    return [
+        {"id": "any", "label": "Any (skill-first — all matching skills)"},
+        *JOB_FIELD_OPTIONS,
+    ]
+
+
+def normalize_focus_field(value: str | None) -> str:
+    from services.job_fields import JOB_FIELDS
+
+    raw = (value or "").strip().lower()
+    if not raw or raw in {"any", "all", "none"}:
+        return ""
+    return raw if raw in JOB_FIELDS else ""
+
+
+def get_focus_field_meta(profile: UserProfile) -> dict[str, object] | None:
+    from services.job_fields import JOB_FIELDS
+
+    fid = normalize_focus_field(getattr(profile, "focus_field", "") or "")
+    if not fid:
+        return None
+    field = JOB_FIELDS.get(fid)
+    if field is None:
+        return None
+    overlay = _FOCUS_OVERLAYS.get(fid, {})
+    return {
+        "id": field.id,
+        "label": field.label,
+        "roles": overlay.get("roles") or field.search_terms,
+        "skill_hints": overlay.get("skill_hints") or field.keywords,
+        "title_hints": overlay.get("title_hints") or field.keywords,
+        "search_terms": field.search_terms,
+        "keywords": field.keywords,
+    }
+
+
+def focus_field_label(profile: UserProfile) -> str:
+    meta = get_focus_field_meta(profile)
+    if meta is None:
+        return "Any (skill-first)"
+    return str(meta["label"])
+
+
+# Adjacent titles to expand scrape coverage (AIML ↔ data/analytics, etc.).
+_ROLE_FAMILIES: dict[str, tuple[str, ...]] = {
+    "aiml": (
+        "AI Engineer",
+        "ML Engineer",
+        "Machine Learning Engineer",
+        "Data Scientist",
+        "Data Analyst",
+        "Data Engineer",
+        "Analytics Engineer",
+        "NLP Engineer",
+        "Computer Vision Engineer",
+        "MLOps Engineer",
+        "Research Scientist",
+        "Applied Scientist",
+        "Business Intelligence Analyst",
+        "Python Developer",
+    ),
+    "data": (
+        "Data Analyst",
+        "Data Scientist",
+        "Data Engineer",
+        "Analytics Engineer",
+        "Business Intelligence Analyst",
+        "BI Developer",
+        "ML Engineer",
+    ),
+    "software": (
+        "Software Engineer",
+        "Backend Engineer",
+        "Full Stack Developer",
+        "Python Developer",
+        "API Developer",
+    ),
+}
+
+_AIML_SKILL_MARKERS = (
+    "pytorch",
+    "tensorflow",
+    "langchain",
+    "langgraph",
+    "llm",
+    "machine learning",
+    "deep learning",
+    "nlp",
+    "computer vision",
+    "scikit",
+    "sklearn",
+    "xgboost",
+    "huggingface",
+    "transformers",
+    "opencv",
+    "rag",
+)
+
+_DATA_SKILL_MARKERS = (
+    "sql",
+    "tableau",
+    "power bi",
+    "pandas",
+    "numpy",
+    "excel",
+    "dbt",
+    "snowflake",
+    "spark",
+    "analytics",
+    "etl",
+)
+
+_AIML_TITLE_HINTS = (
+    "ai engineer",
+    "ml engineer",
+    "machine learning",
+    "data scientist",
+    "data analyst",
+    "data engineer",
+    "nlp",
+    "computer vision",
+    "deep learning",
+    "analytics engineer",
+    "applied scientist",
+    "research scientist",
+    "mlops",
+    "business intelligence",
+)
+
+
+def profile_looks_aiml(profile: UserProfile) -> bool:
+    blob = " ".join(
+        [
+            *profile.skills,
+            *profile.preferred_roles,
+            profile.role,
+            profile.summary or "",
+        ]
+    ).lower()
+    if any(k in blob for k in _AIML_SKILL_MARKERS):
+        return True
+    return any(h in blob for h in ("ai engineer", "ml engineer", "aiml", "ai/ml"))
+
+
+def profile_looks_data(profile: UserProfile) -> bool:
+    blob = " ".join([*profile.skills, *profile.preferred_roles, profile.role]).lower()
+    if any(k in blob for k in _DATA_SKILL_MARKERS):
+        return True
+    return any(h in blob for h in ("data analyst", "data scientist", "data engineer"))
+
+
+def adjacent_role_terms(profile: UserProfile) -> list[str]:
+    """Expanded role family for scrape queries (not only exact preferred titles)."""
+    primary = role_search_terms(profile)
+    out: list[str] = []
+    seen: set[str] = set()
+
+    def _add(role: str) -> None:
+        clean = " ".join(role.split())
+        key = clean.lower()
+        if clean and key not in seen:
+            seen.add(key)
+            out.append(clean)
+
+    for role in primary:
+        _add(role)
+
+    focus = get_focus_field_meta(profile)
+    if focus:
+        for role in focus.get("roles") or ():
+            _add(str(role))
+        return out
+
+    if profile_looks_aiml(profile):
+        for role in _ROLE_FAMILIES["aiml"]:
+            _add(role)
+    elif profile_looks_data(profile):
+        for role in _ROLE_FAMILIES["data"]:
+            _add(role)
+    else:
+        # Generic software / tech IC — still expand a little
+        for role in _ROLE_FAMILIES["software"]:
+            _add(role)
+
+    return out
+
+
+def skill_search_terms(profile: UserProfile, *, limit: int = 10) -> list[str]:
+    """Skills from the resume to drive board search (skill-first discovery).
+
+    When ``focus_field`` is set, prefer skills that belong to that field.
+    """
+    deny = {
+        "communication",
+        "teamwork",
+        "leadership",
+        "english",
+        "hindi",
+        "soft skills",
+        "problem solving",
+        "ms office",
+    }
+    picked: list[str] = []
+    seen: set[str] = set()
+    focus = get_focus_field_meta(profile)
+    focus_hints = {
+        str(h).lower() for h in (focus.get("skill_hints") or ())  # type: ignore[union-attr]
+    } if focus else set()
+
+    def _add(skill: str) -> None:
+        token = " ".join(skill.strip().split())
+        key = token.lower()
+        if len(token) < 2 or key in deny or key in seen:
+            return
+        seen.add(key)
+        picked.append(token)
+
+    all_skills = list(profile.all_skills())
+    # Pass 1: skills that match the optional focus field
+    if focus_hints:
+        for skill in all_skills:
+            key = skill.strip().lower()
+            if key in focus_hints or any(h in key or key in h for h in focus_hints):
+                _add(skill)
+            if len(picked) >= limit:
+                return picked[:limit]
+
+    for skill in all_skills:
+        _add(skill)
+        if len(picked) >= limit:
+            return picked[:limit]
+
+    catalog = list(focus_hints) if focus_hints else [
+        "python",
+        "sql",
+        "pytorch",
+        "tensorflow",
+        "machine learning",
+        "langchain",
+        "pandas",
+        "fastapi",
+        "aws",
+        "azure",
+        "docker",
+        "nlp",
+        "tableau",
+        "power bi",
+        "scikit-learn",
+        "opencv",
+    ]
+    have = {s.strip().lower() for s in all_skills if s.strip()}
+    for skill in catalog:
+        if skill in have or any(skill in h for h in have):
+            _add(skill)
+        if len(picked) >= limit:
+            break
+    return picked[:limit]
+
+
+def listing_matches_profile_keywords(
+    profile: UserProfile,
+    title: str,
+    description: str = "",
+) -> bool:
+    """Skill-first keep rule; optional focus_field narrows to that domain."""
+    hay = f"{title} {description}".lower()
+    if not hay.strip():
+        return False
+
+    focus = get_focus_field_meta(profile)
+    if focus:
+        title_hints = [str(h).lower() for h in (focus.get("title_hints") or ())]
+        skill_hints = [str(h).lower() for h in (focus.get("skill_hints") or ())]
+        title_hit = any(h in hay for h in title_hints)
+        focus_skill_hit = False
+        for skill in profile.all_skills():
+            key = skill.strip().lower()
+            if not any(h in key or key in h for h in skill_hints):
+                continue
+            if _word_boundary_hit(key, hay) or any(
+                _word_boundary_hit(h, hay) for h in _expand_skill(skill) if len(h) > 2
+            ):
+                focus_skill_hit = True
+                break
+        return title_hit or focus_skill_hit
+
+    hits = skill_hits_in_text(profile, hay)
+    if hits >= 1:
+        return True
+
+    for role in adjacent_role_terms(profile)[:8]:
+        if role.lower() in hay:
+            return True
+    return False
+
+
 def _word_boundary_hit(term: str, haystack: str) -> bool:
     if len(term) <= 2:
         return False
@@ -143,33 +594,55 @@ def skill_hits_in_text(profile: UserProfile, text: str) -> int:
 
 
 _TECH_ROLE_WORDS = frozenset(
-    {"engineer", "developer", "analyst", "scientist", "architect", "programmer"}
+    {
+        "engineer",
+        "developer",
+        "analyst",
+        "scientist",
+        "architect",
+        "programmer",
+        "mlops",
+    }
 )
 
 
 def role_relevant(job: JobListing, profile: UserProfile) -> bool:
-    """Job title/description should align with target roles or core skills."""
+    """Skill-first relevance; optional focus_field narrows to that career field."""
+    from services.job_fields import effective_fields, job_matches_any_field
+
+    # Explicit field focus: keep only jobs that match the selected field
+    if normalize_focus_field(getattr(profile, "focus_field", "") or ""):
+        return job_matches_any_field(job, effective_fields(profile), profile)
+
     haystack = (
         f"{job.title} {job.description} {job.requirements} {' '.join(job.skills)}"
     ).lower()
-    roles = role_search_terms(profile)
+    title_l = (job.title or "").lower()
 
+    hits = skill_hits_in_text(profile, haystack)
+    if hits >= 1:
+        return True
+
+    # Title-family fallback (no skill overlap in the snippet)
+    for role in adjacent_role_terms(profile)[:12]:
+        if role.lower() in haystack:
+            return True
+
+    if profile_looks_aiml(profile) or profile_looks_data(profile):
+        if any(h in title_l for h in _AIML_TITLE_HINTS):
+            return True
+
+    roles = role_search_terms(profile)
     role_hit = any(
         _word_boundary_hit(token, haystack)
         for role in roles
         for token in _tokens(role)
-        if len(token) > 2
+        if len(token) > 2 and token not in {"level", "mid"}
     )
-    if role_hit:
+    if role_hit and any(w in haystack for w in _TECH_ROLE_WORDS):
         return True
 
-    profile_role_text = " ".join(roles).lower()
-    if any(w in haystack for w in _TECH_ROLE_WORDS) and any(
-        w in profile_role_text for w in _TECH_ROLE_WORDS
-    ):
-        return True
-
-    return skill_hits_in_text(profile, haystack) >= 2
+    return False
 
 
 def has_unrelated_enterprise_stack(job: JobListing, profile: UserProfile) -> bool:

@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="CareerPilot AI",
     description="Autonomous AI job discovery and resume tailoring assistant.",
-    version="0.2.11",
+    version="0.8.0",
     lifespan=lifespan,
 )
 
@@ -72,12 +72,38 @@ def ollama_status() -> dict:
 
 @app.get("/scheduler/status")
 def scheduler_status() -> dict:
+    from agents.whatsapp_agent import whatsapp_configured
+    from services.email_notifier import email_configured
+    from services.google_drive import drive_credentials_status
     from services.notifier import get_latest_notification_preview
+    from services.notify_config import normalize_backend
+    from database.repositories import get_latest_profile
 
     status = get_scheduler_status()
-    status["notifier_backend"] = settings.notifier_backend
-    status["whatsapp_configured"] = bool(
-        settings.whatsapp_token and settings.whatsapp_phone_id and settings.whatsapp_recipient
-    )
+    latest = get_latest_profile()
+    profile = latest[1] if latest else None
+    from services.notify_config import resolve_notify_config
+
+    cfg = resolve_notify_config(profile)
+    status["notifier_backend"] = cfg.backend
+    status["max_digest_jobs"] = settings.max_digest_jobs
+    status["whatsapp_configured"] = whatsapp_configured(profile)
+    status["email_configured"] = email_configured(profile)
+    status["google_drive"] = drive_credentials_status()
+    status["google_drive_enabled"] = bool(cfg.google_drive_enabled and cfg.google_drive_folder_id)
     status["latest_notification_preview"] = get_latest_notification_preview()
+    status["human_in_the_loop"] = True
+    status["auto_apply"] = False
+    try:
+        from services.proxies import proxy_status
+
+        status["proxies"] = proxy_status()
+    except Exception:  # noqa: BLE001
+        status["proxies"] = {"enabled": False, "configured": False, "count": 0}
+    try:
+        from services.cookies import cookie_status
+
+        status["cookies"] = cookie_status()
+    except Exception:  # noqa: BLE001
+        status["cookies"] = {"enabled": False, "configured": False, "count": 0}
     return status
