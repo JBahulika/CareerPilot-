@@ -1,0 +1,9 @@
+{
+  "name": "CareerPilot Remote",
+  "short_name": "CP Remote",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#0f172a",
+  "description": "Phone remote for CareerPilot (commands + status only)."
+}

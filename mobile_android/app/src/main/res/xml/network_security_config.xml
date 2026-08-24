@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- LAN / Tailscale often use http:// — token still required on the API -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

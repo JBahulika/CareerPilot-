@@ -11,6 +11,7 @@ def test_popular_job_sites_list():
     assert "themuse" in ids
     assert "weworkremotely" in ids
     assert "workingnomads" in ids
+    assert "adzuna" in ids
     assert "indeed" in ids
     assert "naukri" in ids
     assert "linkedin" in ids

@@ -1,0 +1,68 @@
+:root {
+  color-scheme: dark;
+  --bg: #0b1220;
+  --card: #142033;
+  --text: #e8eef7;
+  --muted: #93a4bd;
+  --accent: #3b82f6;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --danger: #f87171;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: radial-gradient(1200px 600px at 20% -10%, #1e3a5f 0%, var(--bg) 55%);
+  color: var(--text);
+  min-height: 100vh;
+}
+.wrap { max-width: 520px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
+header h1 { margin: 0; font-size: 1.6rem; letter-spacing: -0.02em; }
+.sub { color: var(--muted); margin: 0.35rem 0 1.25rem; font-size: 0.92rem; }
+.card {
+  background: color-mix(in srgb, var(--card) 92%, black);
+  border: 1px solid #24344d;
+  border-radius: 14px;
+  padding: 1rem;
+  margin-bottom: 0.9rem;
+}
+label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.35rem; }
+.row { display: flex; align-items: center; gap: 0.6rem; color: var(--text); font-size: 0.95rem; }
+input[type="password"], input[type="text"] {
+  width: 100%;
+  padding: 0.75rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: var(--text);
+  margin-bottom: 0.75rem;
+}
+button {
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  padding: 0.8rem 1rem;
+  font-weight: 600;
+  background: #1e293b;
+  color: var(--text);
+  margin-top: 0.4rem;
+}
+button.primary { background: var(--accent); color: #fff; }
+button.ghost { background: transparent; border: 1px solid #334155; margin-top: 1rem; }
+.actions { display: grid; gap: 0.5rem; margin-bottom: 0.9rem; }
+.msg { font-size: 0.85rem; color: var(--warn); min-height: 1.2em; }
+.hidden { display: none !important; }
+.log {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.78rem;
+  background: #0f172a;
+  border-radius: 8px;
+  padding: 0.75rem;
+  max-height: 280px;
+  overflow: auto;
+  color: #cbd5e1;
+}
+h2 { margin: 0 0 0.6rem; font-size: 1rem; }
+.status strong { color: var(--ok); }

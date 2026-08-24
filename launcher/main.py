@@ -38,6 +38,8 @@ from launcher.preflight import list_ollama_models, run_preflight
 
 STREAMLIT_PORT = 8501
 API_PORT_DEFAULT = 8000
+# Everyday start: if the user does not pick a model, keep last .env choice
+MODEL_PICK_TIMEOUT_S = 10.0
 
 
 def _print_banner() -> None:
@@ -48,6 +50,89 @@ def _print_banner() -> None:
     print("  (never auto-applies / never solves captchas)")
     print("=" * 60)
     print()
+
+
+def _readline_with_timeout(
+    prompt: str,
+    timeout_s: float,
+    *,
+    default: str = "",
+    timeout_message: str | None = None,
+) -> str | None:
+    """Read a line from stdin; on idle timeout return ``default``.
+
+    Returns ``None`` on EOF. If the user starts typing before the timeout,
+    wait for Enter with no further deadline. ``timeout_s <= 0`` waits forever
+    (same as ``input``).
+    """
+    print(prompt, end="", flush=True)
+    if timeout_s is None or float(timeout_s) <= 0:
+        try:
+            return sys.stdin.readline().rstrip("\r\n")
+        except EOFError:
+            return None
+
+    timeout_s = float(timeout_s)
+
+    if sys.platform == "win32":
+        import msvcrt
+
+        buf: list[str] = []
+        deadline = time.time() + timeout_s
+        timed_out = False
+        while True:
+            if msvcrt.kbhit():
+                ch = msvcrt.getwch()
+                if ch in ("\r", "\n"):
+                    print()
+                    return "".join(buf)
+                if ch == "\x03":
+                    raise KeyboardInterrupt
+                if ch in ("\x08", "\x7f"):  # backspace
+                    if buf:
+                        buf.pop()
+                        sys.stdout.write("\b \b")
+                        sys.stdout.flush()
+                    continue
+                # Ignore special keys (arrows etc. come as \x00 / \xe0 + next)
+                if ch in ("\x00", "\xe0"):
+                    if msvcrt.kbhit():
+                        msvcrt.getwch()
+                    continue
+                if ch.isprintable():
+                    buf.append(ch)
+                    sys.stdout.write(ch)
+                    sys.stdout.flush()
+                    # User engaged — no more auto-timeout
+                    deadline = None
+                continue
+            if deadline is not None and time.time() >= deadline:
+                timed_out = True
+                break
+            time.sleep(0.05)
+        print()
+        if timed_out:
+            if timeout_message:
+                print(timeout_message)
+            return default
+        return "".join(buf)
+
+    # POSIX: select on stdin
+    import select
+
+    ready, _, _ = select.select([sys.stdin], [], [], timeout_s)
+    if not ready:
+        print()
+        if timeout_message:
+            print(timeout_message)
+        return default
+    try:
+        line = sys.stdin.readline()
+    except EOFError:
+        return None
+    if line == "":
+        return None
+    return line.rstrip("\r\n")
 
 
 def _load_dotenv_values(root: Path) -> dict[str, str]:
@@ -195,46 +280,73 @@ def _pick_model(base_url: str, current: str) -> str:
     print(f"  {idx}) Type a custom model name")
     custom_idx = idx
 
+    fallback = current or DEFAULT_MODEL
+    print()
+    print(
+        f"No choice in {int(MODEL_PICK_TIMEOUT_S)}s → keep previous model "
+        f"({fallback}). Start typing to cancel the timer."
+    )
+
     while True:
-        try:
-            raw = input("Enter number (or press Enter for default): ").strip()
-        except EOFError:
-            print("No interactive input — using default/current model.")
-            return current or DEFAULT_MODEL
+        raw = _readline_with_timeout(
+            "Enter number (or press Enter for previous): ",
+            MODEL_PICK_TIMEOUT_S,
+            default="",
+            timeout_message=(
+                f"Timed out — using previous model: {fallback}"
+            ),
+        )
+        if raw is None:
+            print("No interactive input — using previous/default model.")
+            return fallback
+        raw = raw.strip()
         if raw == "":
-            return current or DEFAULT_MODEL
+            return fallback
         if not raw.isdigit():
             print("Please enter a number.")
             continue
         choice = int(raw)
         if choice == keep_idx:
-            return current or DEFAULT_MODEL
+            return fallback
         if choice == custom_idx:
-            try:
-                custom = input("Model name (e.g. qwen2.5:7b): ").strip()
-            except EOFError:
-                return current or DEFAULT_MODEL
-            if custom:
-                return custom
-            continue
+            custom = _readline_with_timeout(
+                "Model name (e.g. qwen2.5:7b): ",
+                MODEL_PICK_TIMEOUT_S,
+                default="",
+                timeout_message="Timed out — keeping previous model.",
+            )
+            if custom is None or not custom.strip():
+                return fallback
+            return custom.strip()
         if 1 <= choice <= len(options):
             return options[choice - 1]
         print("Invalid choice.")
 
 
-def _confirm_model(model: str) -> bool:
+def _confirm_model(model: str, *, previous: str = "") -> bool:
     warn = model_warning(model)
     if not warn:
         print(f"Selected model: {model}")
         return True
     print()
     print("WARNING:", warn)
-    try:
-        ans = input("Are you sure you want to continue with this model? [y/N]: ").strip().lower()
-    except EOFError:
+    # Continuing with the same model you already use → default Yes on timeout
+    same_as_previous = bool(previous) and model == previous
+    default = "y" if same_as_previous else "n"
+    hint = "Y/n" if same_as_previous else "y/N"
+    ans = _readline_with_timeout(
+        f"Continue with this model? [{hint}]: ",
+        MODEL_PICK_TIMEOUT_S,
+        default=default,
+        timeout_message=(
+            f"Timed out — {'continuing' if same_as_previous else 'aborting'} "
+            f"({model})."
+        ),
+    )
+    if ans is None:
         print("No interactive input — keeping safer default instead.")
-        return False
-    return ans in {"y", "yes"}
+        return same_as_previous
+    return ans.strip().lower() in {"y", "yes"}
 
 
 def _ensure_model_pulled(model: str) -> bool:
@@ -384,6 +496,20 @@ def main(argv: list[str] | None = None) -> int:
         if c.hint and not c.ok:
             print(f"         -> {c.hint}")
 
+    pw_fail = next((c for c in report.checks if c.title == "Playwright browsers" and not c.ok), None)
+    if pw_fail:
+        print()
+        print("Playwright Chromium missing — installing (needed for Indeed/Naukri)…")
+        try:
+            from launcher.bootstrap import ensure_playwright_browsers
+
+            ensure_playwright_browsers(Path(_resolve_python(root)))
+            print("  Playwright Chromium installed.")
+        except Exception as exc:  # noqa: BLE001
+            print(f"  WARNING: could not install Chromium ({exc})")
+            print("  Indeed/Naukri/LinkedIn scrapes will show as errors until you run:")
+            print("    .venv\\Scripts\\python -m playwright install chromium")
+
     hard_fails = [
         c
         for c in report.checks
@@ -412,7 +538,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Using model: {model}")
     else:
         model = _pick_model(ollama_base, current_model)
-        if not _confirm_model(model):
+        if not _confirm_model(model, previous=current_model):
             print("Aborted. Choose a smaller model next time (qwen2.5:7b recommended).")
             return 1
 

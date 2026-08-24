@@ -124,6 +124,54 @@ def ensure_venv(root: Path, base_python: str | None = None) -> Path:
     return py
 
 
+def ensure_playwright_browsers(venv_py: Path) -> None:
+    """Download Chromium for Indeed/Naukri/LinkedIn scrapes (once)."""
+    marker = Path(venv_py).resolve().parent.parent / ".careerpilot_playwright_ok"
+    # Quick probe: can chromium launch?
+    probe = (
+        "from playwright.sync_api import sync_playwright\n"
+        "p = sync_playwright().start()\n"
+        "try:\n"
+        "    b = p.chromium.launch(headless=True)\n"
+        "    b.close()\n"
+        "    print('ok')\n"
+        "finally:\n"
+        "    p.stop()\n"
+    )
+    r = subprocess.run(
+        [str(venv_py), "-c", probe],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if r.returncode == 0 and "ok" in (r.stdout or ""):
+        if not marker.is_file():
+            marker.write_text("ok\n", encoding="utf-8")
+        print("Playwright Chromium OK (needed for Indeed/Naukri/LinkedIn).")
+        return
+
+    print()
+    print("Installing Playwright Chromium (required for Indeed, Naukri, LinkedIn)…")
+    print("  One-time download — please wait.")
+    print()
+    subprocess.check_call(
+        [str(venv_py), "-m", "playwright", "install", "chromium"],
+    )
+    r2 = subprocess.run(
+        [str(venv_py), "-c", probe],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if r2.returncode != 0:
+        raise RuntimeError(
+            "Playwright Chromium install finished but launch still fails. "
+            "Try manually: .venv\\Scripts\\python -m playwright install chromium"
+        )
+    marker.write_text("ok\n", encoding="utf-8")
+    print("Playwright Chromium installed.")
+
+
 def ensure_deps(venv_py: Path, root: Path) -> None:
     """pip install -r requirements.txt into the venv if imports fail."""
     req = root / "requirements.txt"
@@ -141,36 +189,39 @@ def ensure_deps(venv_py: Path, root: Path) -> None:
 
     if marker.is_file() and _imports_ok():
         print("Dependencies OK.")
-        return
+    else:
+        if not req.is_file():
+            raise RuntimeError(
+                f"Missing {req}. Put CareerPilot.exe next to the full project "
+                "(or unzip the GitHub release / clone), then re-run."
+            )
 
-    if not req.is_file():
-        raise RuntimeError(
-            f"Missing {req}. Put CareerPilot.exe next to the full project "
-            "(or unzip the GitHub release / clone), then re-run."
+        print()
+        print("Installing dependencies (first run can take several minutes)…")
+        print("  This downloads packages including ML libs — please wait.")
+        print()
+        subprocess.check_call(
+            [str(venv_py), "-m", "pip", "install", "--upgrade", "pip"],
+            cwd=str(root),
         )
+        subprocess.check_call(
+            [str(venv_py), "-m", "pip", "install", "-r", str(req)],
+            cwd=str(root),
+        )
+        if not _imports_ok():
+            raise RuntimeError(
+                "Dependencies installed but core imports still fail. "
+                "Try: .venv\\Scripts\\python -m pip install -r requirements.txt"
+            )
+        marker.write_text("ok\n", encoding="utf-8")
+        print("Dependencies installed.")
 
-    print()
-    print("Installing dependencies (first run can take several minutes)…")
-    print("  This downloads packages including ML libs — please wait.")
-    print()
-    subprocess.check_call(
-        [str(venv_py), "-m", "pip", "install", "--upgrade", "pip"],
-        cwd=str(root),
-    )
-    subprocess.check_call(
-        [str(venv_py), "-m", "pip", "install", "-r", str(req)],
-        cwd=str(root),
-    )
-    if not _imports_ok():
-        raise RuntimeError(
-            "Dependencies installed but core imports still fail. "
-            "Try: .venv\\Scripts\\python -m pip install -r requirements.txt"
-        )
-    marker.write_text("ok\n", encoding="utf-8")
-    print("Dependencies installed.")
+    ensure_playwright_browsers(venv_py)
 
 
 def ensure_env_file(root: Path) -> None:
+    from core.model_pins import OLLAMA_MODEL
+
     env_path = root / ".env"
     example = root / ".env.example"
     if env_path.is_file():
@@ -179,7 +230,7 @@ def ensure_env_file(root: Path) -> None:
         print("Creating .env from .env.example")
         env_path.write_text(example.read_text(encoding="utf-8"), encoding="utf-8")
     else:
-        env_path.write_text("OLLAMA_MODEL=qwen2.5:7b\nAPI_PORT=8000\n", encoding="utf-8")
+        env_path.write_text(f"OLLAMA_MODEL={OLLAMA_MODEL}\nAPI_PORT=8000\n", encoding="utf-8")
         print("Created minimal .env")
 
 

@@ -7,13 +7,17 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from agents.base import check_ollama_status
-from api.routes import jobs, pipeline, resume
+from api.routes import jobs, pipeline, remote, resume
 from core.config import settings
 from core.logging import get_logger
+from core.model_pins import pins_snapshot, read_version
 from database.session import init_db
 from services.scheduler import get_scheduler_status, start_daily_scan, stop_daily_scan
 
@@ -43,7 +47,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="CareerPilot AI",
     description="Autonomous AI job discovery and resume tailoring assistant.",
-    version="0.8.0",
+    version=read_version(),
     lifespan=lifespan,
 )
 
@@ -57,11 +61,42 @@ app.add_middleware(
 app.include_router(resume.router)
 app.include_router(jobs.router)
 app.include_router(pipeline.router)
+app.include_router(remote.router)
+
+_REMOTE_UI = Path(__file__).resolve().parent / "remote_ui"
+if settings.remote_ui_enabled and _REMOTE_UI.is_dir():
+    app.mount("/m", StaticFiles(directory=str(_REMOTE_UI), html=True), name="remote_ui")
 
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "scheduler": get_scheduler_status()}
+    return {
+        "status": "ok",
+        "version": read_version(),
+        "scheduler": get_scheduler_status(),
+    }
+
+
+@app.get("/meta/pins")
+def meta_pins() -> dict:
+    """Phase 7 — pinned defaults + live runtime values (``.env`` may override)."""
+    snap = pins_snapshot()
+    snap["runtime"] = {
+        "ollama_model": settings.ollama_model,
+        "embedding_model": settings.embedding_model,
+        "reranker_model": settings.reranker_model,
+        "reranker_enabled": settings.reranker_enabled,
+        "min_match_score": settings.min_match_score,
+    }
+    return snap
+
+
+@app.get("/meta/remote")
+def meta_remote() -> dict:
+    """Phase 11 — phone remote connectivity (no token value; safe for Setup UI)."""
+    from services.remote_setup import get_remote_setup_status
+
+    return get_remote_setup_status()
 
 
 @app.get("/ollama/status")

@@ -12,6 +12,28 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from core.model_pins import (
+    EMBEDDING_MODEL,
+    HYBRID_SEARCH_ENABLED,
+    HYBRID_VECTOR_WEIGHT,
+    MATCHER_LLM_TOP_N,
+    MATCHER_RECALL_TOP_N,
+    MATCHER_RERANK_TOP_N,
+    MAX_DIGEST_JOBS,
+    MIN_MATCH_SCORE,
+    OLLAMA_BASE_URL,
+    OLLAMA_MODEL,
+    RECENT_JOBS_DAYS,
+    RERANKER_ENABLED,
+    RERANKER_MODEL,
+    SCORE_WEIGHT_EMBED,
+    SCORE_WEIGHT_LLM,
+    SCORE_WEIGHT_RERANK,
+    SCORE_WEIGHT_SKILL,
+    SCRAPE_LIMIT_MAX,
+    STILL_HIRING_DAYS,
+)
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -20,41 +42,41 @@ class Settings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
-    # Ollama (local LLM)
-    ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "qwen2.5:7b"
+    # Ollama (local LLM) — defaults from core.model_pins (Phase 7)
+    ollama_base_url: str = OLLAMA_BASE_URL
+    ollama_model: str = OLLAMA_MODEL
 
     # Embeddings & matching accuracy
-    embedding_model: str = "BAAI/bge-base-en-v1.5"
-    reranker_model: str = "BAAI/bge-reranker-base"
-    reranker_enabled: bool = True
-    hybrid_search_enabled: bool = True
-    hybrid_vector_weight: float = 0.65
-    matcher_recall_top_n: int = 50
-    matcher_rerank_top_n: int = 20
-    matcher_llm_top_n: int = 8
-    score_weight_embed: float = 0.15
-    score_weight_skill: float = 0.25
-    score_weight_rerank: float = 0.45
-    score_weight_llm: float = 0.15
+    embedding_model: str = EMBEDDING_MODEL
+    reranker_model: str = RERANKER_MODEL
+    reranker_enabled: bool = RERANKER_ENABLED
+    hybrid_search_enabled: bool = HYBRID_SEARCH_ENABLED
+    hybrid_vector_weight: float = HYBRID_VECTOR_WEIGHT
+    matcher_recall_top_n: int = MATCHER_RECALL_TOP_N
+    matcher_rerank_top_n: int = MATCHER_RERANK_TOP_N
+    matcher_llm_top_n: int = MATCHER_LLM_TOP_N
+    score_weight_embed: float = SCORE_WEIGHT_EMBED
+    score_weight_skill: float = SCORE_WEIGHT_SKILL
+    score_weight_rerank: float = SCORE_WEIGHT_RERANK
+    score_weight_llm: float = SCORE_WEIGHT_LLM
 
     # Pipeline
     top_n_jobs: int = 10
     tailor_resumes_enabled: bool = False  # resume PDF tailoring paused for now
-    min_match_score: int = 60  # 0–100; profile/run can override
+    min_match_score: int = MIN_MATCH_SCORE  # 0–100; profile/run can override
     job_source: str = "all"  # "all" | remotive | wellfound | indeed | ...
     display_page_size: int = 10
     max_page_size: int = 15
-    recent_jobs_days: int = 3
+    recent_jobs_days: int = RECENT_JOBS_DAYS
     experience_flex_years: int = 1
     daily_recent_jobs_days: int = 2
     default_include_remote: bool = True
     # Phase 10a — still-hiring heuristic (date-based; never invent when unknown)
     still_hiring_enabled: bool = True
-    still_hiring_days: int = 7  # posted within N days → "likely still hiring"
+    still_hiring_days: int = STILL_HIRING_DAYS  # posted within N days → "likely still hiring"
     still_hiring_prefer: bool = True  # sort/prefer likely over stale/unknown
     # Aggregate splits this across enabled boards (per_source = max(10, limit // n))
-    scrape_limit_max: int = 2000
+    scrape_limit_max: int = SCRAPE_LIMIT_MAX
 
     # Safe scrape HTTP (Phase 2) — polite delays; never solve captchas
     scrape_min_delay_ms: int = 400
@@ -97,7 +119,7 @@ class Settings(BaseSettings):
 
     # Notifications (Phase 4) — human-in-the-loop digests; no auto-apply
     notifier_backend: str = "local"  # local | whatsapp | email | both
-    max_digest_jobs: int = 5  # sort by score desc, then truncate
+    max_digest_jobs: int = MAX_DIGEST_JOBS  # sort by score desc, then truncate
     # Phase 8 — skip jobs already sent in digests unless refresh / score jump
     notify_dedupe_enabled: bool = True
     notify_resend_score_delta: int = 10  # re-notify if score rises by this many points
@@ -125,6 +147,14 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     api_base_url: str = "http://localhost:8000"
+    # Phase 11 — phone remote (empty = remote API disabled)
+    remote_api_token: str = ""
+    remote_ui_enabled: bool = True
+
+    # Optional Adzuna Jobs API (https://developer.adzuna.com — free app id/key)
+    adzuna_app_id: str = ""
+    adzuna_app_key: str = ""
+    adzuna_country: str = ""  # blank = infer from profile (in/us/gb/…)
 
     # Local directories (privacy: resumes never leave the machine)
     resumes_dir: Path = PROJECT_ROOT / "resumes"

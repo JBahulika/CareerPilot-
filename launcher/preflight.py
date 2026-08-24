@@ -93,6 +93,31 @@ def check_dependencies() -> CheckResult:
     return CheckResult(True, "Python packages", "Core imports OK")
 
 
+def check_playwright_chromium() -> CheckResult:
+    """Soft/hard: Indeed/Naukri/LinkedIn need Chromium browsers."""
+    if importlib.util.find_spec("playwright") is None:
+        return CheckResult(
+            False,
+            "Playwright browsers",
+            "playwright package missing",
+            "Run setup_careerpilot.bat or: pip install playwright && playwright install chromium",
+        )
+    try:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            browser.close()
+        return CheckResult(True, "Playwright browsers", "Chromium ready (Indeed/Naukri/LinkedIn)")
+    except Exception as exc:  # noqa: BLE001
+        return CheckResult(
+            False,
+            "Playwright browsers",
+            str(exc)[:200],
+            "Run: .venv\\Scripts\\python -m playwright install chromium",
+        )
+
+
 def check_ollama_cli() -> CheckResult:
     path = shutil.which("ollama")
     if not path:
@@ -178,6 +203,7 @@ def run_preflight(
     report.checks.append(check_project_root(root))
     report.checks.append(check_venv_hint(root))
     report.checks.append(check_dependencies())
+    report.checks.append(check_playwright_chromium())
     report.checks.append(check_ollama_cli())
     api_check = check_ollama_api(ollama_base_url)
     if require_ollama_api:

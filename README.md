@@ -1,6 +1,6 @@
 # CareerPilot AI
 
-**Version [`0.8.0`](VERSION)** · [Changelog](CHANGELOG.md) · [Upgrade notes](docs/UPGRADE_NOTES.md) · [Legal stance](docs/LEGAL.md)
+**Version [`0.10.0`](VERSION)** · [Changelog](CHANGELOG.md) · [Upgrade notes](docs/UPGRADE_NOTES.md) · [Model pins](docs/MODEL_PINS.md) · [Remote access](docs/REMOTE_ACCESS.md) · [Legal stance](docs/LEGAL.md)
 
 An autonomous, **local-first** AI assistant that discovers relevant jobs and scores
 them against your resume — all on your machine. Built as a multi-agent pipeline
@@ -153,25 +153,23 @@ All settings live in `.env` (see [`.env.example`](.env.example)):
 
 ### Job sources
 
-CareerPilot prefers public API/RSS sources. LinkedIn/Indeed are default-on best-effort scrapes (abort on captcha; never solve). Glassdoor stays off by default:
+CareerPilot prefers public API/RSS sources. LinkedIn/Indeed/Naukri are best-effort
+(captcha never solved). Indeed uses a public GraphQL search API with **cursor
+pagination** (JobSpy-style) and Playwright fallback; Naukri captures the site's
+own `jobapi` JSON across SERP pages 1–3:
 
-| Site | Method | Region | Safety | Default |
-|------|--------|--------|--------|---------|
-| Remotive | API | Global | api | on |
-| RemoteOK | API | Global | api | on |
-| Arbeitnow | API | Global | api | on |
-| Jobicy | API | Global | api | on |
-| Himalayas | API | Global | api | on |
-| The Muse | API | Global | api | on |
-| We Work Remotely | RSS | Global | api | on |
-| Working Nomads | API | Global | api | on |
-| Wellfound (AngelList) | Scrape | Global | scrape_risky | off |
-| Naukri | Scrape | India | scrape_risky | off |
-| Indeed | Scrape | Global | disabled_captcha | on |
-| LinkedIn | Scrape | Global | disabled_captcha | on |
-| Glassdoor | Scrape | Global | disabled_captcha | off |
+| Source | Method | Region | Notes | Default |
+|--------|--------|--------|-------|---------|
+| Remotive, RemoteOK, Arbeitnow, Jobicy, Himalayas, The Muse, Working Nomads | API | Global | Public JSON | on |
+| We Work Remotely | RSS | Global | Public feed | on |
+| Adzuna | API | Global | Optional free keys (`ADZUNA_APP_*`) | off |
+| Indeed | GraphQL (+ Playwright fallback) | Global / IN | Paginated; real dates from API | on |
+| Naukri | jobapi capture (+ DOM fallback) | India | Pages 1–3; bot walls may still empty | on |
+| LinkedIn, Glassdoor, Wellfound | Playwright | Global | Often empty / captcha | on |
 
-Set `JOB_SOURCE=all` to query every source in one run, or pick a single id (e.g. `remotive`, `naukri`). Scraped sites may return fewer results when a board blocks automation. Challenge/captcha pages are **aborted** (`captcha_blocked`) — CareerPilot never solves captchas. Check **Setup → Job source health** or `GET /jobs/sources/health`.
+Set `JOB_SOURCE=all` to query every **enabled** source in one run, or pick a single id (e.g. `remotive`, `naukri`). Scraped sites may return fewer results when a board blocks automation. Challenge/captcha pages are **aborted** (`captcha_blocked`) — CareerPilot never solves captchas. Check **Setup → Job source health** or `GET /jobs/sources/health`.
+
+**Tip:** If Indeed/Naukri show fewer matches than the website, raise scrape limit, keep experience flex ≥1–2 years, and ensure Playwright Chromium is installed (`setup_careerpilot.bat`). For Adzuna, register at [developer.adzuna.com](https://developer.adzuna.com), set keys in `.env`, then enable **Adzuna** under Profile → job sources.
 
 ### Experience matching
 
@@ -325,14 +323,32 @@ Tracked in [`docs/UPGRADE_NOTES.md`](docs/UPGRADE_NOTES.md). High level:
 4. ~~WhatsApp / email digests (human-in-the-loop; no auto-apply)~~ — **0.2.12**
 5. ~~Proxies, random scan windows, quiet hours, stronger 429 backoff~~ — **0.3.0**
 6. ~~Optional user cookies (advanced) + stricter limits~~ — **0.4.0**
-7. Model pins + GitHub as source of truth
+7. ~~Model pins + GitHub as source of truth~~ — **0.9.0**
 8. ~~Dedupe already-notified digests~~ — **0.5.0**
 9. ~~Skills-gap + cover letter only after user selects a job~~ — **0.6.0**
 10a. ~~Still-hiring labels / prefer fresh dated listings~~ — **0.7.0**
 10b. ~~One-click launcher (Ollama + API + Streamlit)~~ — **0.8.0**
-7. Model pins + GitHub as source of truth
+11. ~~Phone remote control (token API + mobile PWA)~~ — **0.10.0**
 
 **Out of scope:** captcha solvers, access-control circumvention, auto-apply.
+
+### Phase 11 — phone remote
+
+Set `REMOTE_API_TOKEN` in `.env`, then use one of:
+
+| Device | How |
+|--------|-----|
+| **Android** | Build/sideload **`CareerPilot-Remote-debug.apk`** via `build_remote_apk.bat` (or Android Studio → `mobile_android/`) |
+| **iPhone** | Safari → `http://<host>:8000/m/` → **Share → Add to Home Screen** (free) |
+
+Full steps (LAN / Tailscale / ngrok): [`docs/REMOTE_ACCESS.md`](docs/REMOTE_ACCESS.md).  
+Processing stays on the PC/VPS; the phone only sends commands and reads status.
+
+### Phase 7 — model pins
+
+Defaults live in [`core/model_pins.py`](core/model_pins.py) and
+[`docs/MODEL_PINS.md`](docs/MODEL_PINS.md). Setup shows them; `GET /meta/pins`
+returns pinned + live values. GitHub `main` is the published source of truth.
 
 ### Phase 5 settings (optional)
 

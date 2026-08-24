@@ -6,7 +6,7 @@ cd /d "%~dp0"
 title CareerPilot
 echo.
 echo  CareerPilot - start
-echo  (asks which model to use, then opens the app)
+echo  (model picker: pick a number, or wait 10s to keep last model)
 echo.
 
 if not exist "%~dp0.venv\Scripts\python.exe" (

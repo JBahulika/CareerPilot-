@@ -50,3 +50,11 @@ cenv/
 ui/cenv/
 .venv/
 venv/
+
+# Android / APK build outputs
+mobile_android/.gradle/
+mobile_android/build/
+mobile_android/app/build/
+mobile_android/local.properties
+*.apk
+*.aab

@@ -197,6 +197,220 @@ def _render_connect_guides() -> None:
 
 
 # --- Pages -------------------------------------------------------------------
+def _render_phone_remote_setup() -> None:
+    """Setup → phone remote: connectivity status + Android / iPhone instructions."""
+    st.subheader("Phone remote (Android & iPhone)")
+    st.markdown(
+        """
+CareerPilot runs on **this computer**. Your phone is only a remote control:
+start a scan, check progress, read digests. It does **not** scrape jobs or run
+AI on the phone. CareerPilot **never auto-applies** and **never solves captchas**.
+        """.strip()
+    )
+
+    remote = None
+    try:
+        resp = api_get("/meta/remote")
+        if resp.status_code == 200:
+            remote = resp.json()
+    except Exception as exc:  # noqa: BLE001
+        st.warning(f"Could not load remote status: {exc}")
+        return
+
+    if not remote:
+        st.warning("Remote status endpoint unavailable. Restart the API and refresh.")
+        return
+
+    c1, c2, c3, c4 = st.columns(4)
+    token_label = "Set" if remote.get("token_configured") else "Missing"
+    ui_label = "Ready" if remote.get("mobile_ui_ready") else "Off / missing"
+    apk_label = "Built" if remote.get("apk_built") else "Not built yet"
+    ready = remote.get("readiness") or "unknown"
+    c1.metric("Remote token", token_label)
+    c2.metric("Mobile UI (/m/)", ui_label)
+    c3.metric("Android APK", apk_label)
+    c4.metric("Status", ready)
+
+    if remote.get("ok"):
+        st.success(
+            remote.get("readiness_detail")
+            or "Phone remote is ready — follow the phone tab for your device."
+        )
+    elif remote.get("readiness") == "disabled":
+        st.warning(
+            "**Not ready yet.** Do the “Turn on remote access” steps below first "
+            "(add a token to `.env`, then restart). The metrics above will flip to "
+            "**Set** / **ready** when it worked."
+        )
+    else:
+        st.info(remote.get("readiness_detail") or "See the steps below.")
+
+    st.markdown("##### Addresses for your phone")
+    urls = remote.get("phone_ui_urls") or []
+    api_urls = remote.get("phone_api_urls") or []
+    if urls:
+        st.markdown(
+            "Phone and PC must be on the **same Wi‑Fi** (or both on Tailscale). "
+            "Copy one of these into the phone browser (Safari / Chrome):"
+        )
+        for u in urls:
+            st.code(u, language=None)
+        if api_urls:
+            st.markdown(
+                "If you install the **Android APK**, use this as **Server URL** "
+                "(stop before `/m/`):"
+            )
+            for u in api_urls[:2]:
+                st.code(u, language=None)
+    else:
+        st.warning(
+            "Could not detect this PC’s Wi‑Fi address automatically.\n\n"
+            "- **Windows:** open Command Prompt → `ipconfig` → look for "
+            "**IPv4 Address** under your Wi‑Fi adapter (often `192.168.…`).\n"
+            "- **Mac:** System Settings → Network → Wi‑Fi → Details, or Terminal → "
+            "`ipconfig getifaddr en0`.\n\n"
+            "Then on the phone open `http://THAT_IP:8000/m/`."
+        )
+
+    with st.expander(
+        "Turn on remote access on this PC (do this once)",
+        expanded=not remote.get("ok"),
+    ):
+        st.markdown(
+            """
+**What this does:** creates a secret password (“token”) so only you can control
+CareerPilot from a phone. Without it, phone control stays off.
+
+**1 — Create a token**
+
+On this PC, open a terminal in the CareerPilot folder and run:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+Copy the long string it prints. Do **not** reuse your email/Wi‑Fi password.
+
+**2 — Save it in `.env`**
+
+Open the file named `.env` in the same folder as `start_careerpilot.bat`
+(if the file is missing, copy `.env.example` to `.env` first). Add or edit:
+
+```env
+REMOTE_API_TOKEN=paste_the_token_here
+REMOTE_UI_ENABLED=true
+```
+
+Save the file. Never commit `.env` to git or paste the token into chat/screenshots.
+
+**3 — Restart CareerPilot**
+
+- **Windows:** close the CareerPilot windows, then run `start_careerpilot.bat` again.
+- **Mac / Linux:** stop uvicorn/Streamlit (Ctrl+C), then start them again the way you usually do.
+
+**4 — Check this page**
+
+Click refresh (or re-open **Setup**). Above, **Remote token** should say **Set**
+and **Status** should say **ready**. If it still says **Missing**, the API did not
+pick up `.env` — confirm you edited the right file and fully restarted.
+
+**5 — Let the phone reach this PC**
+
+If the phone browser cannot open the address:
+
+- PC and phone on the **same Wi‑Fi** (guest/isolation Wi‑Fi often blocks this).
+- **Windows Firewall:** allow inbound **TCP port 8000** for Python / CareerPilot.
+- Away from home: install **Tailscale** on PC + phone and use the Tailscale IP,
+  or an HTTPS tunnel (ngrok / Cloudflare) to port 8000 — **keep the token set**.
+            """
+        )
+
+    tab_android, tab_ios, tab_browser = st.tabs(
+        ["Android phone", "iPhone / iPad", "Browser on Mac or PC"]
+    )
+
+    with tab_android:
+        st.markdown(
+            """
+#### Easiest: Chrome on the phone (no install)
+
+1. Finish **Turn on remote access** above until Status is **ready**.
+2. On the Android phone, join the **same Wi‑Fi** as this PC.
+3. Open **Chrome** and go to one of the **phone addresses** listed above
+   (they end with `/m/`).
+4. Paste your token (the same value as `REMOTE_API_TOKEN`) → **Save & connect**.
+5. Optional: Chrome menu (⋮) → **Add to Home screen** for an app-like icon.
+
+You should see a connected / OK state. From there you can start a pipeline and
+read digests. Heavy work still runs on this PC.
+
+#### Optional: install the APK
+
+Use this if you want a dedicated app icon that talks to your PC.
+
+1. On a computer with **Android Studio** (or JDK 17 + Android SDK), in the
+   CareerPilot folder run **`build_remote_apk.bat`**, *or* open `mobile_android/`
+   in Android Studio → **Build → Build APK(s)**.
+2. Copy `CareerPilot-Remote-debug.apk` to the phone (USB, Drive, etc.).
+3. Open the file on the phone. If asked, allow **Install unknown apps** for that app.
+4. Open **CareerPilot Remote** and enter:
+   - **Server URL** — the address **without** `/m/` (see “Addresses” above)
+   - **Token** — same as `REMOTE_API_TOKEN`
+5. Tap **Save & connect**.
+            """
+        )
+        if remote.get("apk_built"):
+            st.caption(f"APK already in this project folder: `{remote.get('apk_path')}`.")
+        else:
+            st.caption(
+                "No APK in the project folder yet — that is fine; Chrome works without it."
+            )
+
+    with tab_ios:
+        st.markdown(
+            """
+There is **no free App Store app** for CareerPilot (Apple requires a paid developer
+account for public IPAs). Use **Safari** instead — it works well as a Home Screen app.
+
+1. Finish **Turn on remote access** above until Status is **ready**.
+2. iPhone / iPad on the **same Wi‑Fi** as this PC (or Tailscale / HTTPS tunnel).
+3. Open **Safari** (Chrome on iOS cannot “Add to Home Screen” the same way).
+4. Go to a **phone address** above ending in `/m/`
+   (example shape: `http://192.168.0.99:8000/m/`).
+5. Tap the **Share** button → **Add to Home Screen** → **Add**.
+6. Open the new home-screen icon → paste your **token** → **Save & connect**.
+
+**If the page does not load:** check firewall port **8000**, same Wi‑Fi, and that
+**Remote token** on this Setup page shows **Set**.
+            """
+        )
+
+    with tab_browser:
+        local = remote.get("local_ui_url") or "http://127.0.0.1:8000/m/"
+        st.markdown(
+            f"""
+Use this on a **Mac**, another Windows PC, or any browser on the same network.
+
+**On this same computer**
+
+1. Open [{local}]({local}) in any browser.
+2. Paste `REMOTE_API_TOKEN` → **Save & connect**.
+
+**From another computer or phone on Wi‑Fi**
+
+1. Use one of the LAN addresses in **Addresses for your phone** above.
+2. Paste the token → **Save & connect**.
+
+More detail (Tailscale, tunnels, API): see `docs/REMOTE_ACCESS.md` in the repo.
+            """
+        )
+
+    st.caption(
+        "Security: do not expose port 8000 to the public internet without a strong token. "
+        "Never commit `.env` or share the token in screenshots."
+    )
+
+
 def page_setup() -> None:
     st.header("Setup")
     st.write(f"API base URL: `{API_BASE_URL}`")
@@ -208,6 +422,37 @@ def page_setup() -> None:
         )
         return
     st.success("Backend is running.")
+
+    try:
+        pins = api_get("/meta/pins").json()
+        models = pins.get("models") or {}
+        runtime = pins.get("runtime") or {}
+        st.subheader("Model pins (Phase 7)")
+        st.caption(
+            f"App **v{pins.get('version', '?')}** · defaults from "
+            "[`docs/MODEL_PINS.md`](https://github.com/JBahulika/CareerPilot-/blob/main/docs/MODEL_PINS.md). "
+            "Local `.env` may override."
+        )
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Ollama (pinned)", models.get("ollama_model", "—"))
+        c2.metric("Embeddings", models.get("embedding_model", "—"))
+        c3.metric(
+            "Reranker",
+            models.get("reranker_model", "—")
+            if models.get("reranker_enabled", True)
+            else "off",
+        )
+        live = runtime.get("ollama_model")
+        pinned = models.get("ollama_model")
+        if live and pinned and live != pinned:
+            st.info(f"Runtime Ollama model override: **{live}** (pin is `{pinned}`).")
+        gh = (pins.get("github") or {}).get("main")
+        if gh:
+            st.caption(f"Published source of truth: {gh}")
+    except Exception as exc:  # noqa: BLE001
+        st.caption(f"Could not load model pins: {exc}")
+
+    _render_phone_remote_setup()
 
     with st.expander("How to connect WhatsApp, email, Drive & cookies", expanded=False):
         _render_connect_guides()
@@ -1249,7 +1494,7 @@ def main() -> None:
     )
     st.sidebar.markdown(
         "**Quick start**\n"
-        "1. Setup - check Ollama + **How to connect**\n"
+        "1. Setup - Ollama, **phone remote**, How to connect\n"
         "2. Profile - upload, notifications, save\n"
         "3. Run Pipeline\n"
         "4. Results - matches + apply links"

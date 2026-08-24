@@ -19,9 +19,65 @@ Do not ship feature work without a changelog line.
 
 ## [Unreleased]
 
-### Planned (phased roadmap)
+### Added
 
-- Phase 7: model pins — see `docs/UPGRADE_NOTES.md`.
+- **Setup → Phone remote**: Android + iPhone/iPad + browser install steps, live
+  connectivity status (`GET /meta/remote`), and detected LAN URLs for the phone.
+
+### Improved
+
+- **Launcher model picker**: if you do not choose a model within **10 seconds**,
+  `start_careerpilot.bat` keeps the previously saved `OLLAMA_MODEL` (typing cancels
+  the timer). Phone remote Setup copy clarified (what/why + Windows/Mac restart).
+
+- **Indeed**: GraphQL cursor pagination (up to 5×100), sort `RELEVANCE`, wider
+  radius, multi-query oversample — closer to what the website shows than a
+  single date-sorted page of 50.
+- **Naukri**: capture jobapi across SERP pages 1–3; larger per-query quotas.
+- **LinkedIn / Glassdoor / Playwright SERP**: scroll to hydrate lazy cards;
+  mild experience stretch so senior-skewed SERPs are not wiped empty.
+- **Adzuna** (optional API): add free keys in `.env` (`ADZUNA_APP_ID` /
+  `ADZUNA_APP_KEY`), then enable in Profile → job sources.
+
+### Fixed
+
+- **Indeed / Naukri scrapes** (aligned with JobSpy-style approaches):
+  - Indeed: public GraphQL search API first (`in.indeed.com` for India), Playwright SERP fallback
+  - Naukri: capture the page's own `jobapi/v3/search` JSON (no captcha solving); DOM fallback
+  - Setup installs Playwright Chromium; missing browser no longer fails silently
+  - Seniority / tight 3-day recency no longer make a healthy scrape look empty
+- **Jobicy**: nested industry/skill fields no longer crash validation
+
+## [0.10.0] — 2026-08-24
+
+### Added (Phase 11)
+
+- **Phone remote control**: token-gated `/remote/*` API to start pipeline, view status,
+  list digests, toggle daily scan / notify prefs — work stays on the host PC/VPS.
+- Minimal PWA at `/m/` (installable mobile web UI). Docs: [`docs/REMOTE_ACCESS.md`](docs/REMOTE_ACCESS.md)
+  (LAN / Tailscale / ngrok). Empty `REMOTE_API_TOKEN` disables remote routes (503).
+- **Android APK** project in `mobile_android/` + `build_remote_apk.bat` (sideload).
+  **iPhone**: Safari → Add to Home Screen (free). Remote UI accepts a configurable server URL.
+- Guardrails unchanged: no auto-apply, no captcha solving.
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
+
+## [0.9.0] — 2026-08-24
+
+### Added (Phase 7)
+
+- **Model pins**: `core/model_pins.py` + [`docs/MODEL_PINS.md`](docs/MODEL_PINS.md) as the
+  checklist for Ollama / embeddings / reranker and related matcher knobs.
+- `Settings` defaults import from pins; launcher default LLM follows the same pin.
+- `GET /meta/pins` (pinned + live runtime) and Setup page “Model pins” section.
+- FastAPI `version` and `/health.version` read from the `VERSION` file.
+- GitHub `main` documented as the published source of truth (links in pins snapshot).
+
+### Dependencies
+
+- No dependency changes (`requirements.txt` unchanged).
 
 ## [0.8.0] — 2026-08-20
 

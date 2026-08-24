@@ -24,6 +24,7 @@ delete old phase branches — they back up that phase’s tip.
 | 9 | `phase-9-skills-gap-cover-letter` |
 | 10a | `phase-10a-still-hiring` |
 | 10b | `phase-10b-launcher` |
+| 11 | `phase-11-mobile-remote` |
 
 Workflow:
 
@@ -56,15 +57,19 @@ Workflow:
 - [`phase-4-digest-notifiers`](https://github.com/JBahulika/CareerPilot-/tree/phase-4-digest-notifiers)
 - [`phase-5-proxies-scan-windows`](https://github.com/JBahulika/CareerPilot-/tree/phase-5-proxies-scan-windows)
 - [`phase-6-optional-cookies`](https://github.com/JBahulika/CareerPilot-/tree/phase-6-optional-cookies)
+- [`phase-7-model-pins-publish`](https://github.com/JBahulika/CareerPilot-/tree/phase-7-model-pins-publish)
 - [`phase-8-dedupe-notified`](https://github.com/JBahulika/CareerPilot-/tree/phase-8-dedupe-notified)
 - [`phase-9-skills-gap-cover-letter`](https://github.com/JBahulika/CareerPilot-/tree/phase-9-skills-gap-cover-letter)
 - [`phase-10a-still-hiring`](https://github.com/JBahulika/CareerPilot-/tree/phase-10a-still-hiring)
 - [`phase-10b-launcher`](https://github.com/JBahulika/CareerPilot-/tree/phase-10b-launcher)
+- [`phase-11-mobile-remote`](https://github.com/JBahulika/CareerPilot-/tree/phase-11-mobile-remote)
 - [`main`](https://github.com/JBahulika/CareerPilot-/tree/main) (latest merged work)
 
 ## Models pin (update when defaults change)
 
-| Component | Current default (0.8.0) |
+See also [`docs/MODEL_PINS.md`](MODEL_PINS.md) and `core/model_pins.py` (Phase 7).
+
+| Component | Current default (0.10.0) |
 |-----------|-------------------------|
 | Ollama LLM | `qwen2.5:7b` |
 | Embeddings | `BAAI/bge-base-en-v1.5` |
@@ -84,8 +89,35 @@ Workflow:
 | Board cookies | off (`SCRAPE_COOKIES_ENABLED=false`) |
 | Cookie strict limits | on when cookies used |
 | Resume tailoring | off (`TAILOR_RESUMES_ENABLED=false`) |
+| Phone remote | off until `REMOTE_API_TOKEN` set (Phase 11) |
 
-Source of truth for runtime knobs: `core/config.py` (mirrored in `.env.example`).
+Source of truth for runtime knobs: `core/config.py` (defaults from `core/model_pins.py`;
+mirrored in `.env.example`). Published tree: GitHub `main`.
+
+## Unreleased — scraper yield (Indeed / Naukri / Adzuna)
+
+- Indeed GraphQL: cursor pagination, `RELEVANCE` sort, wider radius, multi-query oversample.
+- Naukri: jobapi capture across SERP pages 1–3.
+- Optional **Adzuna** API (`ADZUNA_APP_ID` / `ADZUNA_APP_KEY`); off by default until enabled in Profile.
+- Playwright SERP scroll for LinkedIn / Glassdoor / Indeed fallback.
+- **Setup UI**: phone remote instructions (Android / iPhone / browser) + connectivity status via `GET /meta/remote`.
+
+## [0.10.0] — Phase 11: phone remote control
+
+- Token-gated `/remote/*` API: run pipeline, status, digests, toggle daily scan / notify.
+- Mobile PWA at `/m/`; Android APK via `mobile_android/` + `build_remote_apk.bat`;
+  iPhone uses Safari Add to Home Screen (free).
+- Docs in [`REMOTE_ACCESS.md`](REMOTE_ACCESS.md) (LAN / Tailscale / ngrok).
+- Host does all processing; phone is command + status only. No auto-apply / captcha solving.
+- Dependencies: no `requirements.txt` changes.
+
+## [0.9.0] — Phase 7: model pins + GitHub as source of truth
+
+- `core/model_pins.py` holds pinned LLM / embedding / reranker + key matcher defaults.
+- [`docs/MODEL_PINS.md`](MODEL_PINS.md) change checklist; Setup + `GET /meta/pins`.
+- `VERSION` drives FastAPI version and `/health.version`.
+- GitHub `main` linked as the published source of truth.
+- Dependencies: no `requirements.txt` changes.
 
 ## [0.8.0] — Phase 10b: one-click launcher
 
@@ -323,12 +355,12 @@ Source of truth for runtime knobs: `core/config.py` (mirrored in `.env.example`)
 |-------|--------|
 | 5 | ~~Proxies, random scan window, quiet hours, 429 backoff~~ — **0.3.0** |
 | 6 | ~~Optional user cookies (advanced), stricter rate limits~~ — **0.4.0** |
-| 7 | Model pin checklist + publish GitHub as source of truth |
+| 7 | ~~Model pin checklist + publish GitHub as source of truth~~ — **0.9.0** |
 | 8 | ~~Dedupe across runs (already notified)~~ — **0.5.0** |
 | 9 | ~~Skills-gap + cover letter only after user selects a job~~ — **0.6.0** |
 | 10a | ~~Still-hiring (fresh/dated listings; fail closed)~~ — **0.7.0** |
 | 10b | ~~One-click launcher (Ollama + API + Streamlit, model picker)~~ — **0.8.0** |
-| 7 | Model pin checklist + publish GitHub as source of truth |
+| 11 | ~~Phone remote (token API + mobile PWA)~~ — **0.10.0** |
 
 ## How to verify after upgrading
 

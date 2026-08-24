@@ -66,3 +66,37 @@ def test_ensure_env_file_from_example(tmp_path):
     ensure_env_file(tmp_path)
     assert (tmp_path / ".env").is_file()
     assert "OLLAMA_MODEL" in (tmp_path / ".env").read_text(encoding="utf-8")
+
+
+def test_readline_timeout_returns_default(monkeypatch):
+    """Idle timeout keeps the previous model choice."""
+    import launcher.main as lm
+
+    class _FakeMsvcrt:
+        @staticmethod
+        def kbhit():
+            return False
+
+        @staticmethod
+        def getwch():
+            raise AssertionError("should not read keys when idle")
+
+    monkeypatch.setattr(lm.sys, "platform", "win32")
+    monkeypatch.setitem(__import__("sys").modules, "msvcrt", _FakeMsvcrt())
+    # Advance time past deadline immediately after first poll
+    t0 = [1000.0]
+
+    def _time():
+        t0[0] += 20.0
+        return t0[0]
+
+    monkeypatch.setattr(lm.time, "time", _time)
+    monkeypatch.setattr(lm.time, "sleep", lambda _s: None)
+
+    out = lm._readline_with_timeout(
+        "pick: ",
+        10.0,
+        default="qwen2.5:7b",
+        timeout_message="timed out",
+    )
+    assert out == "qwen2.5:7b"

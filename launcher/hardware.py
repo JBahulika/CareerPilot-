@@ -192,4 +192,5 @@ RECOMMENDED_MODELS = [
     ("llama3.1:8b", "Strong general alternative"),
 ]
 
-DEFAULT_MODEL = "qwen2.5:7b"
+from core.model_pins import OLLAMA_MODEL as DEFAULT_MODEL
+

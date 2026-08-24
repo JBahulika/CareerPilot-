@@ -21,12 +21,22 @@ def test_search_location_uses_preferred():
 
 
 def test_indeed_url_includes_location():
+    from agents.job_sources.scrape_sources import _indeed_host
+
     profile = UserProfile(role="Engineer", preferred_location="Bangalore")
     query = quote_plus(search_terms(profile))
     loc = quote_plus(search_location(profile))
-    url = f"https://www.indeed.com/jobs?q={query}&sort=date&l={loc}"
+    host = _indeed_host(profile)
+    url = f"{host}/jobs?q={query}&sort=date&l={loc}"
+    assert host == "https://in.indeed.com"
     assert "bengaluru" in url.lower() or "bangalore" in url.lower()
     assert "karnataka" in url.lower()
+
+
+def test_indeed_host_global_for_us():
+    from agents.job_sources.scrape_sources import _indeed_host
+
+    assert _indeed_host(UserProfile(preferred_location="New York, USA")) == "https://www.indeed.com"
 
 
 def test_naukri_url_includes_location_slug():

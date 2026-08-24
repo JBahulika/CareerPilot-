@@ -85,6 +85,15 @@ POPULAR_JOB_SITES: list[dict[str, object]] = [
         "notes": "Public exposed_jobs JSON",
     },
     {
+        "id": "adzuna",
+        "name": "Adzuna",
+        "method": "api",
+        "safety": "api",
+        "enabled_by_default": False,
+        "region": "global",
+        "notes": "Optional free API — set ADZUNA_APP_ID + ADZUNA_APP_KEY",
+    },
+    {
         "id": "wellfound",
         "name": "Wellfound (AngelList)",
         "method": "scrape",
@@ -100,7 +109,7 @@ POPULAR_JOB_SITES: list[dict[str, object]] = [
         "safety": "scrape_risky",
         "enabled_by_default": True,
         "region": "india",
-        "notes": "Best-effort Playwright (pre–Phase 2 style)",
+        "notes": "Capture jobapi JSON from public SERP (pages 1–3); DOM fallback; never solves captchas",
     },
     {
         "id": "indeed",
@@ -109,7 +118,7 @@ POPULAR_JOB_SITES: list[dict[str, object]] = [
         "safety": "scrape_risky",
         "enabled_by_default": True,
         "region": "global",
-        "notes": "Best-effort Playwright; never solves captchas",
+        "notes": "GraphQL search with cursor pagination (JobSpy-style); Playwright SERP fallback",
     },
     {
         "id": "linkedin",
@@ -165,6 +174,7 @@ def resolve_enabled_sources(profile: UserProfile | None = None) -> set[str]:
 
 def _build_registry() -> dict[str, JobSource]:
     from agents.job_sources.api_sources import (
+        AdzunaSource,
         ArbeitnowSource,
         HimalayasSource,
         JobicySource,
@@ -192,6 +202,7 @@ def _build_registry() -> dict[str, JobSource]:
         TheMuseSource(),
         WeWorkRemotelySource(),
         WorkingNomadsSource(),
+        AdzunaSource(),
         WellfoundSource(),
         IndeedSource(),
         NaukriSource(),

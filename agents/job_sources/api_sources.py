@@ -6,6 +6,7 @@ from agents.job_sources.common import (
     annotate_and_filter_jobs,
     build_job,
     parse_posted_at,
+    search_location,
     search_queries,
     sort_and_filter_recent,
     split_limit_across_queries,
@@ -18,6 +19,25 @@ from services.source_health import get_source_health_registry
 from services.skills import listing_matches_profile_keywords, skill_search_terms
 
 logger = get_logger(__name__)
+
+
+def _as_str_list(value) -> list[str]:
+    """Normalize API skill/tag fields that may be str, list[str], or list[list]."""
+    if value is None or value == "":
+        return []
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    if isinstance(value, list):
+        out: list[str] = []
+        for item in value:
+            if isinstance(item, str) and item.strip():
+                out.append(item.strip())
+            elif isinstance(item, list):
+                out.extend(_as_str_list(item))
+            elif item is not None:
+                out.append(str(item))
+        return out
+    return [str(value)]
 
 
 class RemotiveSource:
@@ -187,7 +207,7 @@ class JobicySource:
                     company=item.get("companyName", ""),
                     title=title,
                     description=desc,
-                    skills=[item.get("jobIndustry", "")] if item.get("jobIndustry") else [],
+                    skills=_as_str_list(item.get("jobIndustry")),
                     location=item.get("jobGeo", "Remote"),
                     salary=item.get("annualSalaryMin", "") or "",
                     apply_url=item.get("url", ""),
@@ -229,7 +249,7 @@ class HimalayasSource:
                     company=item.get("companyName", ""),
                     title=title,
                     description=desc,
-                    skills=item.get("categories", []) or [],
+                    skills=_as_str_list(item.get("categories") or item.get("tags")),
                     location="Remote",
                     apply_url=item.get("applicationLink", "") or item.get("slug", ""),
                     posted_at=parse_posted_at(item.get("pubDate")),
@@ -347,6 +367,118 @@ class WeWorkRemotelySource:
             )
             if len(jobs) >= limit:
                 break
+        return _finalize(jobs, profile, allow_stretch, flex_years, self.name)
+
+
+def _adzuna_country(profile: UserProfile) -> str:
+    """Adzuna country path segment (in, us, gb, …)."""
+    loc = (search_location(profile) or "").lower()
+    if any(x in loc for x in ("india", "bengaluru", "bangalore", "hyderabad", "pune", "mumbai", "chennai", "delhi", "noida", "gurgaon", "gurugram")):
+        return "in"
+    if any(x in loc for x in ("united kingdom", "uk", "london", "manchester", "edinburgh")):
+        return "gb"
+    if any(x in loc for x in ("canada", "toronto", "vancouver", "montreal")):
+        return "ca"
+    if any(x in loc for x in ("australia", "sydney", "melbourne")):
+        return "au"
+    if any(x in loc for x in ("germany", "berlin", "munich", "hamburg")):
+        return "de"
+    return "us"
+
+
+class AdzunaSource:
+    """Optional Adzuna Jobs API (free key from developer.adzuna.com).
+
+    Skips quietly when ``ADZUNA_APP_ID`` / ``ADZUNA_APP_KEY`` are unset so
+    aggregate runs stay healthy without credentials.
+    """
+
+    name = "adzuna"
+
+    def fetch(self, profile, limit, *, allow_stretch=False, flex_years=None) -> list[JobListing]:
+        from core.config import settings
+
+        app_id = (getattr(settings, "adzuna_app_id", "") or "").strip()
+        app_key = (getattr(settings, "adzuna_app_key", "") or "").strip()
+        if not app_id or not app_key:
+            logger.info("adzuna: skipped (set ADZUNA_APP_ID + ADZUNA_APP_KEY to enable)")
+            return []
+
+        country = (getattr(settings, "adzuna_country", "") or "").strip().lower() or _adzuna_country(
+            profile
+        )
+        queries = search_queries(profile)[:3]
+        loc = search_location(profile)
+        where = loc.split(",")[0].strip() if loc else ""
+        per_page = min(50, max(20, int(limit)))
+        jobs: list[JobListing] = []
+        seen: set[str] = set()
+
+        for query in queries:
+            if len(jobs) >= limit:
+                break
+            try:
+                raw = get_scrape_client().get_json(
+                    f"https://api.adzuna.com/v1/api/jobs/{country}/search/1",
+                    source_id=self.name,
+                    params={
+                        "app_id": app_id,
+                        "app_key": app_key,
+                        "results_per_page": per_page,
+                        "what": query,
+                        "where": where,
+                        "content-type": "application/json",
+                        "sort_by": "date",
+                    },
+                )
+            except (CaptchaBlockedError, RateLimitedError) as exc:
+                logger.error(f"Adzuna aborted: {exc}")
+                break
+            except Exception as exc:  # noqa: BLE001
+                get_source_health_registry().record(self.name, "error", str(exc))
+                logger.error(f"Adzuna failed ({query!r}): {exc}")
+                continue
+
+            for item in raw.get("results") or []:
+                if len(jobs) >= limit:
+                    break
+                if not isinstance(item, dict):
+                    continue
+                title = item.get("title") or ""
+                if not title:
+                    continue
+                company = ""
+                company_obj = item.get("company")
+                if isinstance(company_obj, dict):
+                    company = company_obj.get("display_name") or ""
+                elif isinstance(company_obj, str):
+                    company = company_obj
+                location = where or "Remote"
+                loc_obj = item.get("location")
+                if isinstance(loc_obj, dict):
+                    location = loc_obj.get("display_name") or location
+                desc = strip_html(item.get("description") or "")
+                apply_url = item.get("redirect_url") or item.get("adref") or ""
+                salary = ""
+                if item.get("salary_min") or item.get("salary_max"):
+                    lo = item.get("salary_min") or ""
+                    hi = item.get("salary_max") or ""
+                    salary = f"{lo}-{hi}".strip("-")
+                job = build_job(
+                    source=self.name,
+                    company=company,
+                    title=title,
+                    description=desc or title,
+                    location=location,
+                    salary=salary,
+                    apply_url=apply_url,
+                    posted_at=parse_posted_at(item.get("created")),
+                )
+                if job.content_hash in seen:
+                    continue
+                seen.add(job.content_hash)
+                jobs.append(job)
+
         return _finalize(jobs, profile, allow_stretch, flex_years, self.name)
 
 
