@@ -23,6 +23,9 @@ Do not ship feature work without a changelog line.
 
 - **Setup → Phone remote**: Android + iPhone/iPad + browser install steps, live
   connectivity status (`GET /meta/remote`), and detected LAN URLs for the phone.
+- **[`docs/INSTRUCTIONS.md`](docs/INSTRUCTIONS.md)** — full user guide (setup, daily
+  start, dashboard, phone, sources, notifications, troubleshooting). README trimmed
+  to overview + quick start and links here.
 
 ### Improved
 

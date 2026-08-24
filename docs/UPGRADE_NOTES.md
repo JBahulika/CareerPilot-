@@ -101,6 +101,7 @@ mirrored in `.env.example`). Published tree: GitHub `main`.
 - Optional **Adzuna** API (`ADZUNA_APP_ID` / `ADZUNA_APP_KEY`); off by default until enabled in Profile.
 - Playwright SERP scroll for LinkedIn / Glassdoor / Indeed fallback.
 - **Setup UI**: phone remote instructions (Android / iPhone / browser) + connectivity status via `GET /meta/remote`.
+- **[`docs/INSTRUCTIONS.md`](INSTRUCTIONS.md)** — consolidated user guide; README points here for all how-tos.
 
 ## [0.10.0] — Phase 11: phone remote control
 

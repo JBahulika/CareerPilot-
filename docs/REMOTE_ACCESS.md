@@ -6,6 +6,10 @@ matching always run on the **host PC or VPS** — the phone only sends commands.
 
 **Never auto-applies. Never solves captchas.**
 
+For the full product guide (setup, dashboard, sources, notifications), see
+[`INSTRUCTIONS.md`](INSTRUCTIONS.md). In the running app, use **Setup → Phone remote**
+for live connectivity status and the same steps with your LAN URL filled in.
+
 ## Enable (host)
 
 1. Generate a long random token (do not reuse passwords):

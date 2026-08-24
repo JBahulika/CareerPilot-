@@ -7,3 +7,6 @@
 #
 # The WebView loads bundled assets from app/src/main/assets/www
 # (synced from ../remote_ui). User enters host URL + REMOTE_API_TOKEN in the UI.
+#
+# Full phone setup (token, LAN, iPhone Safari): see docs/INSTRUCTIONS.md
+# and docs/REMOTE_ACCESS.md
