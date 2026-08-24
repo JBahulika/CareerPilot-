@@ -40,7 +40,8 @@ Workflow:
 - [ ] **`CHANGELOG.md`** — version section + bullets
 - [ ] **`docs/UPGRADE_NOTES.md`** — human summary + model pins if changed
 - [ ] **`VERSION`** + FastAPI `version=` in `main.py`
-- [ ] **`README.md`** — version line, new settings/UX, stack table if models change
+- [ ] **`README.md`** — version line, quick start, links
+- [ ] **`docs/INSTRUCTIONS.md`** — user how-tos when setup/UX changes
 - [ ] **`requirements.txt`** — add/pin new deps; if none, write
       `No dependency changes` in that version’s CHANGELOG
 - [ ] **`.env.example`** — any new env knobs
