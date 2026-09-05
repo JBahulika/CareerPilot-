@@ -204,6 +204,15 @@ def _default_url_for_source(source_id: str) -> str:
         "wellfound": "https://wellfound.com/",
         "remotive": "https://remotive.com/",
         "remoteok": "https://remoteok.com/",
+        "freelancer": "https://www.freelancer.com/",
+        "upwork": "https://www.upwork.com/",
+        "guru": "https://www.guru.com/",
+        "peopleperhour": "https://www.peopleperhour.com/",
+        "internshala": "https://internshala.com/",
+        "truelancer": "https://www.truelancer.com/",
+        "fiverr": "https://www.fiverr.com/",
+        "workana": "https://www.workana.com/",
+        "freelancermap": "https://www.freelancermap.com/",
     }
     return defaults.get((source_id or "").lower(), "https://example.com/")
 

@@ -95,8 +95,12 @@ See also [`docs/MODEL_PINS.md`](MODEL_PINS.md) and `core/model_pins.py` (Phase 7
 Source of truth for runtime knobs: `core/config.py` (defaults from `core/model_pins.py`;
 mirrored in `.env.example`). Published tree: GitHub `main`.
 
-## Unreleased — scraper yield (Indeed / Naukri / Adzuna)
+## Unreleased — freelance boards + scraper yield
 
+- Freelance marketplaces: **Freelancer.com** public API (default on), Jobspresso RSS,
+  Playwright for Upwork / Guru / PeoplePerHour / Internshala / Truelancer / Workana /
+  freelancermap / WorknHire (default on). Long-tail boards (Fiverr, Toptal, Malt, …)
+  are listed in Profile but off until you enable them.
 - Indeed GraphQL: cursor pagination, `RELEVANCE` sort, wider radius, multi-query oversample.
 - Naukri: jobapi capture across SERP pages 1–3.
 - Optional **Adzuna** API (`ADZUNA_APP_ID` / `ADZUNA_APP_KEY`); off by default until enabled in Profile.

@@ -95,7 +95,10 @@ Prefer public APIs. Scraped boards are best-effort; captcha pages abort (never s
 | Source | Method | Default |
 |--------|--------|---------|
 | Remotive, RemoteOK, Arbeitnow, Jobicy, Himalayas, The Muse, Working Nomads | API | on |
-| We Work Remotely | RSS | on |
+| We Work Remotely, Jobspresso | RSS | on |
+| Freelancer.com | Public projects API | on |
+| Upwork, Guru, PeoplePerHour, Internshala, Truelancer, Workana, freelancermap, WorknHire | Playwright | on |
+| Fiverr, Toptal, Malt, Twago, Contra, Arc.dev, Turing, Lemon.io, Braintrust, Gun.io, Codementor, OnlineJobs.ph, Outsourcely, Authentic Jobs, 99designs, crowdSPRING, Dribbble, FlexJobs, Sribulancer, Andela, Revelo, A.Team | Playwright | off (enable in Profile) |
 | Adzuna | API (needs free keys) | off |
 | Indeed | GraphQL pagination (+ Playwright fallback) | on |
 | Naukri | jobapi capture pages 1–3 (+ DOM fallback) | on |

@@ -198,15 +198,19 @@ Open `http://127.0.0.1:8000/m/` on the host, or the LAN `/m/` URL from another d
 ## 6. Job sources
 
 Enable/disable boards under **Profile**. Default-on sources include Remotive, RemoteOK,
-Arbeitnow, Jobicy, Himalayas, The Muse, We Work Remotely, Working Nomads, Wellfound,
-Indeed, Naukri, LinkedIn, Glassdoor.
+Arbeitnow, Jobicy, Himalayas, The Muse, We Work Remotely, Working Nomads, Jobspresso,
+Freelancer.com, Upwork, Guru, PeoplePerHour, Internshala, Truelancer, Workana,
+freelancermap, WorknHire, Wellfound, Indeed, Naukri, LinkedIn, Glassdoor.
 
 | Source | How it works |
 |--------|----------------|
 | **Indeed** | Public GraphQL search with pagination; Playwright fallback |
 | **Naukri** | Captures the site’s own `jobapi` JSON (pages 1–3); DOM fallback |
+| **Freelancer.com** | Public projects API (no key) |
+| **Upwork / Guru / PeoplePerHour / Internshala / …** | Freelance marketplaces; Playwright (often blocked; never solves captchas) |
 | **LinkedIn / Glassdoor / Wellfound** | Best-effort Playwright (often blocked; never solves captchas) |
 | **Adzuna** | Optional; off until you set keys and enable it |
+| **Fiverr, Toptal, FlexJobs, 99designs, …** | Listed in Profile, **off by default** (login/paywall/gig boards) |
 
 ### Optional Adzuna
 

@@ -141,6 +141,20 @@ POPULAR_JOB_SITES: list[dict[str, object]] = [
 ]
 
 
+def _append_freelance_sites() -> None:
+    from agents.job_sources.freelance_sources import freelance_registry_rows
+
+    existing = {str(s["id"]) for s in POPULAR_JOB_SITES}
+    for row in freelance_registry_rows():
+        sid = str(row["id"])
+        if sid not in existing:
+            POPULAR_JOB_SITES.append(row)
+            existing.add(sid)
+
+
+_append_freelance_sites()
+
+
 class JobSource(Protocol):
     name: str
 
@@ -191,6 +205,7 @@ def _build_registry() -> dict[str, JobSource]:
         NaukriSource,
         WellfoundSource,
     )
+    from agents.job_sources.freelance_sources import build_freelance_sources
     from agents.job_sources.aggregate import AggregateSource
 
     sources: list[JobSource] = [
@@ -208,6 +223,7 @@ def _build_registry() -> dict[str, JobSource]:
         NaukriSource(),
         LinkedInSource(),
         GlassdoorSource(),
+        *build_freelance_sources(),
     ]
     registry = {s.name: s for s in sources}
     registry["all"] = AggregateSource(list(sources))

@@ -21,6 +21,13 @@ Do not ship feature work without a changelog line.
 
 ### Added
 
+- **Freelance marketplaces**: Freelancer.com public projects API (default on),
+  Jobspresso RSS, plus Playwright adapters for Upwork, Guru, PeoplePerHour,
+  Internshala, Truelancer, Workana, freelancermap, WorknHire (default on) and a
+  long tail of opt-in boards (Fiverr, Toptal, Malt, Twago, Contra, Arc.dev,
+  Turing, Lemon.io, Braintrust, Gun.io, Codementor, OnlineJobs.ph, Outsourcely,
+  Authentic Jobs, 99designs, crowdSPRING, Dribbble Jobs, FlexJobs, Sribulancer,
+  Andela, Revelo, A.Team). Scrapes stay best-effort; captchas are never solved.
 - **Setup → Phone remote**: Android + iPhone/iPad + browser install steps, live
   connectivity status (`GET /meta/remote`), and detected LAN URLs for the phone.
 - **[`docs/INSTRUCTIONS.md`](docs/INSTRUCTIONS.md)** — full user guide (setup, daily

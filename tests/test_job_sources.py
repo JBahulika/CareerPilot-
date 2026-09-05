@@ -15,7 +15,9 @@ def test_popular_job_sites_list():
     assert "indeed" in ids
     assert "naukri" in ids
     assert "linkedin" in ids
-    assert len(POPULAR_JOB_SITES) >= 10
+    assert "freelancer" in ids
+    assert "upwork" in ids
+    assert len(POPULAR_JOB_SITES) >= 30
 
 
 def test_get_source_all():

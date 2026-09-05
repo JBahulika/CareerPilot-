@@ -42,6 +42,9 @@ def test_default_enabled_include_api_and_scrape_boards():
     assert "glassdoor" in enabled
     assert "naukri" in enabled
     assert "wellfound" in enabled
+    assert "freelancer" in enabled
+    assert "upwork" in enabled
+    assert "internshala" in enabled
 
 
 def test_resolve_allowlist_uses_profile_override():
@@ -234,3 +237,5 @@ def test_get_source_new_ids():
     assert get_source("themuse").name == "themuse"
     assert get_source("weworkremotely").name == "weworkremotely"
     assert get_source("workingnomads").name == "workingnomads"
+    assert get_source("freelancer").name == "freelancer"
+    assert get_source("upwork").name == "upwork"
